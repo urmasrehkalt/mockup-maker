@@ -278,7 +278,7 @@ function proposalCard(message, live, send, state) {
     if (!id) return;
     preview.querySelectorAll(`[data-component-id="${CSS.escape(id)}"]`).forEach((el) => el.classList.toggle("wf-highlight", on));
   };
-  const open = () => openMockupViewer({ title: p.mockup.title, version: "·", tree: p.mockup });
+  const open = () => openMockupViewer({ title: p.mockup.title, tree: p.mockup });
   const mockupColumn = h("div", { class: "proposal-side" },
     h("button", { type: "button", class: "proposal-preview", onclick: open, "aria-label": t("mockup.open", { title: p.mockup.title }) }, preview),
     h("button", { type: "button", class: "small", onclick: open }, t("chat.open_mockup")));
@@ -404,7 +404,7 @@ function newViewCard(message, live, send, state) {
         .map((row) => (row.index === null ? { index: null, text: row.text }
           : row.state === "edited" ? { index: row.index, text: row.text } : { index: row.index })) });
   };
-  const open = () => openMockupViewer({ title: v.mockup.title, version: "·", tree: v.mockup });
+  const open = () => openMockupViewer({ title: v.mockup.title, tree: v.mockup });
 
   return h("div", { class: "card-block proposal new-view-card" },
     heading,
@@ -456,7 +456,7 @@ function mockupPair(before, after) {
         : h("p", { class: "hint" }, t("chat.no_mockup"))),
     h("figure", {}, h("figcaption", {}, t("chat.after")),
       h("button", { type: "button", class: "proposal-preview", "aria-label": t("mockup.open", { title: after.title }),
-        onclick: () => openMockupViewer({ title: after.title, version: "·", tree: after }) }, afterView)));
+        onclick: () => openMockupViewer({ title: after.title, tree: after }) }, afterView)));
 }
 
 function criteriaDiff(before, after) {

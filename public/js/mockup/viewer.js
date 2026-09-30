@@ -37,7 +37,7 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
     if (download) download.href = `/api/projects/${projectId}/mockups/${mockup.id}/png?version=${shown.number}`;
     if (markButton) markButton.disabled = annotating || shown.number !== latest;
     toggles.forEach((b, i) => b.setAttribute("aria-pressed", String(["desktop", "mobile"][i] === viewport)));
-    mount(heading, shown.tree.title, h("span", { class: "muted" }, ` · v${shown.number}`),
+    mount(heading, shown.tree.title, shown.number ? h("span", { class: "muted" }, ` · v${shown.number}`) : null,
       shown.number !== latest ? h("span", { class: "old-version" }, t("mockup.older")) : null);
     if (annotating) {
       mount(stage, createArtboard(shown.tree, shown.annotations, { editable: true,
