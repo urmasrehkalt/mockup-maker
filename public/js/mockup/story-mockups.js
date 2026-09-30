@@ -37,6 +37,10 @@ async function draw(section, state, story, reload) {
     }
   };
 
+  const viewerOptions = { projectId: state.project.id, onChange: async () => {
+    const next = await reload();
+    draw(section, next, next.stories.find((s) => s.id === story.id) ?? story, reload);
+  } };
   const templateSelect = h("select", { "aria-label": t("mockup.template") },
     templateCache.map((tpl) => h("option", { value: tpl.key }, tpl.name)));
   const existingSelect = h("select", { "aria-label": t("mockup.existing") },
@@ -46,12 +50,12 @@ async function draw(section, state, story, reload) {
     h("legend", {}, t("mockup.section")),
     linked.length
       ? h("ul", { class: "mockup-links" }, linked.map((m) => h("li", {},
-        h("button", { type: "button", class: "thumb-button", onclick: () => openMockupViewer(m),
+        h("button", { type: "button", class: "thumb-button", onclick: () => openMockupViewer(m, viewerOptions),
           "aria-label": t("mockup.open", { title: m.title }) }, thumbnail(m.tree)),
         h("div", { class: "mockup-link-body" },
           h("strong", {}, m.title), h("span", { class: "muted" }, ` · v${m.version}`),
           h("div", { class: "mockup-link-actions" },
-            h("button", { type: "button", class: "small", onclick: () => openMockupViewer(m) }, t("mockup.view")),
+            h("button", { type: "button", class: "small", onclick: () => openMockupViewer(m, viewerOptions) }, t("mockup.view")),
             h("button", { type: "button", class: "small", onclick: () =>
               act(() => api.unlinkMockup(state.project.id, story.id, m.id)) }, t("mockup.unlink")))))))
       : h("p", { class: "hint" }, t("mockup.none")),

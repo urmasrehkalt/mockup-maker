@@ -548,3 +548,16 @@ dialog.viewer { width: min(1100px, calc(100vw - 32px)); }
 label.stacked { display: grid; gap: 4px; font-weight: 600; margin: 8px 0 0; }
 .change textarea { width: 100%; }
 @media (max-width: 700px) { .change-mockups { grid-template-columns: 1fr; } }
+
+/* --- mockup versions -------------------------------------------------- */
+
+.viewer-body { display: grid; gap: 16px; }
+.with-versions .viewer-body { grid-template-columns: minmax(0, 1fr) 240px; align-items: start; }
+.versions h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.version-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.version { display: grid; width: 100%; text-align: left; gap: 2px; }
+.version.shown { border-color: var(--accent); background: var(--accent-soft); }
+.version-date { font-size: 0.75rem; }
+.versions > button.primary { width: 100%; }
+.old-version { margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; background: #fff4d6; color: #7a5200; vertical-align: middle; }
+@media (max-width: 800px) { .with-versions .viewer-body { grid-template-columns: 1fr; } }

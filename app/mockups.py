@@ -156,6 +156,13 @@ class Mockup(BaseModel):
     updated_at: str
 
 
+class Version(BaseModel):
+    number: int
+    note: str
+    created_at: str
+    tree: Tree
+
+
 class Template(BaseModel):
     key: str
     name: str
@@ -238,6 +245,30 @@ def update_for_story(conn: sqlite3.Connection, project_id: int, story_id: int, m
     return mockup_id, version
 
 
+def versions(conn: sqlite3.Connection, project_id: int, mockup_id: int) -> list[Version]:
+    get_mockup(conn, project_id, mockup_id)
+    rows = conn.execute("SELECT number, note, created_at, tree FROM mockup_versions "
+                        "WHERE mockup_id = ? ORDER BY number", (mockup_id,)).fetchall()
+    return [Version(number=r["number"], note=r["note"], created_at=r["created_at"],
+                    tree=Tree.model_validate_json(r["tree"])) for r in rows]
+
+
+def restore(conn: sqlite3.Connection, project_id: int, mockup_id: int, number: int) -> Mockup:
+    """Make an earlier version the newest one. History is never rewritten: the old
+    version is copied forward as a new version, and the step can be undone."""
+    old = next((v for v in versions(conn, project_id, mockup_id) if v.number == number), None)
+    if old is None:
+        raise HTTPException(404, "Version not found")
+    mockup = get_mockup(conn, project_id, mockup_id)
+    if number == mockup.version:
+        raise HTTPException(409, "That version is already the newest")
+    with conn:
+        backlog.record_undo(conn, project_id, "mockup_restored", title=mockup.title, version=number)
+        add_version(conn, mockup_id, old.tree, note=f"restore:{number}")
+        db.touch_project(conn, project_id)
+    return get_mockup(conn, project_id, mockup_id)
+
+
 def link(conn: sqlite3.Connection, project_id: int, story_id: int, mockup_id: int) -> None:
     story = backlog.get_story(conn, project_id, story_id)
     get_mockup(conn, project_id, mockup_id)
@@ -293,6 +324,18 @@ def post_mockup(project_id: int, data: MockupIn, conn: sqlite3.Connection = Depe
 @router.get("/api/projects/{project_id}/mockups/{mockup_id}", response_model=Mockup)
 def read_mockup(project_id: int, mockup_id: int, conn: sqlite3.Connection = Depends(db.get_db)):
     return get_mockup(conn, project_id, mockup_id)
+
+
+@router.get("/api/projects/{project_id}/mockups/{mockup_id}/versions", response_model=list[Version])
+def list_versions(project_id: int, mockup_id: int, conn: sqlite3.Connection = Depends(db.get_db)):
+    return versions(conn, project_id, mockup_id)
+
+
+@router.post("/api/projects/{project_id}/mockups/{mockup_id}/versions/{number}/restore",
+             response_model=Mockup)
+def post_restore(project_id: int, mockup_id: int, number: int,
+                 conn: sqlite3.Connection = Depends(db.get_db)):
+    return restore(conn, project_id, mockup_id, number)
 
 
 @router.put("/api/projects/{project_id}/stories/{story_id}/mockups/{mockup_id}", status_code=204)

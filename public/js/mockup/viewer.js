@@ -1,32 +1,90 @@
-// Mockup viewer: a large preview with a desktop / mobile toggle.
+// Mockup viewer: a large preview with a desktop / mobile toggle and, for a saved
+// mockup, its version history (preview any version, restore an earlier one).
 
+import { api } from "../api.js";
 import { h, mount } from "../dom.js";
-import { t } from "../i18n.js";
+import { formatDateTime, t } from "../i18n.js";
+import { errorText, notice } from "../ui.js";
 import { renderTree } from "./render.js";
 
-export function openMockupViewer(mockup) {
+/**
+ * @param mockup   { id?, title, version, tree }
+ * @param options  { projectId, onChange } to show versions; onChange() runs after a restore
+ */
+export function openMockupViewer(mockup, { projectId = null, onChange = null } = {}) {
   const stage = h("div", { class: "wf-stage" });
+  const side = h("aside", { class: "versions" });
+  const heading = h("h2", {});
   let viewport = "desktop";
+  let shown = { number: mockup.version, tree: mockup.tree };
+  let latest = mockup.version;
+
   const toggles = ["desktop", "mobile"].map((v) => h("button", {
     type: "button", class: "small", "aria-pressed": String(v === viewport),
     onclick: () => { viewport = v; draw(); },
   }, t(`mockup.${v}`)));
 
-  const draw = () => {
+  function draw() {
     toggles.forEach((b, i) => b.setAttribute("aria-pressed", String(["desktop", "mobile"][i] === viewport)));
-    mount(stage, renderTree(mockup.tree, { viewport }));
-  };
+    mount(heading, shown.tree.title, h("span", { class: "muted" }, ` · v${shown.number}`),
+      shown.number !== latest ? h("span", { class: "old-version" }, t("mockup.older")) : null);
+    mount(stage, renderTree(shown.tree, { viewport }));
+  }
 
-  const dialog = h("dialog", { class: "editor viewer", "aria-label": mockup.title });
+  async function loadVersions() {
+    let list;
+    try {
+      list = await api.mockupVersions(projectId, mockup.id);
+    } catch (error) {
+      mount(side, notice(errorText(error), "error"));
+      return;
+    }
+    latest = list.at(-1).number;
+    const status = h("div", { class: "form-status" });
+    mount(side,
+      h("h3", {}, t("mockup.versions")),
+      h("ol", { class: "version-list", reversed: true }, [...list].reverse().map((v) => h("li", {},
+        h("button", { type: "button", class: `version ${v.number === shown.number ? "shown" : ""}`,
+          "aria-pressed": String(v.number === shown.number),
+          onclick: () => { shown = v; draw(); loadVersions(); } },
+          h("strong", {}, `v${v.number}`), " ", noteLabel(v.note),
+          h("span", { class: "muted version-date" }, formatDateTime(v.created_at)))))),
+      shown.number !== latest ? h("button", { type: "button", class: "primary", onclick: async () => {
+        try {
+          const restored = await api.restoreVersion(projectId, mockup.id, shown.number);
+          shown = { number: restored.version, tree: restored.tree };
+          await onChange?.();
+          await loadVersions();
+          draw();
+        } catch (error) {
+          mount(status, notice(errorText(error), "error"));
+        }
+      } }, t("mockup.restore", { version: shown.number })) : null,
+      status);
+  }
+
+  const dialog = h("dialog", { class: `editor viewer ${projectId ? "with-versions" : ""}`, "aria-label": mockup.title });
   const close = () => { dialog.close(); dialog.remove(); };
   mount(dialog,
-    h("div", { class: "viewer-head" },
-      h("h2", {}, mockup.title, h("span", { class: "muted" }, ` · v${mockup.version}`)),
+    h("div", { class: "viewer-head" }, heading,
       h("div", { class: "segmented" }, toggles),
       h("button", { type: "button", class: "small", onclick: close }, t("mockup.close"))),
-    stage);
+    h("div", { class: "viewer-body" }, stage, projectId && mockup.id ? side : null));
   dialog.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
   document.body.append(dialog);
   draw();
+  if (projectId && mockup.id) loadVersions();
   dialog.showModal();
+}
+
+// Where a version came from, from the note the server stored with it.
+function noteLabel(note) {
+  const [kind, detail] = note.split(":");
+  switch (kind) {
+    case "template": return t("mockup.note_template");
+    case "proposal": return t("mockup.note_proposal");
+    case "change": return t("mockup.note_change");
+    case "restore": return t("mockup.note_restore", { version: detail });
+    default: return t("mockup.note_manual");
+  }
 }
