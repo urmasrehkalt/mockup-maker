@@ -39,6 +39,7 @@ class ProjectPage {
   async send(input) {
     if (this.pending) return;
     this.pending = true;
+    this.slow = input.kind === "focus" || (input.kind === "next" && input.step === "criteria");
     this.error = null;
     if (input.kind !== "retry") this.optimistic(input);
     this.draw();
@@ -86,7 +87,8 @@ class ProjectPage {
         project.description ? h("p", { class: "muted" }, project.description) : null),
       stepBar(project.step, (step) => this.goTo(step), this.pending),
       h("div", { class: "workspace" },
-        conversation(this.state, (input) => this.send(input), { pending: this.pending, error: this.error }),
+        conversation(this.state, (input) => this.send(input),
+          { pending: this.pending, error: this.error, slow: this.slow }),
         backlogPanel(this.state, () => this.reload())));
     this.view.querySelector(".step.current")?.scrollIntoView({ block: "nearest", inline: "center" });
     const end = this.view.querySelector(".composer");

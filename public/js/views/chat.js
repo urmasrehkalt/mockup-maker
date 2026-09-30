@@ -3,6 +3,8 @@
 
 import { h } from "../dom.js";
 import { t } from "../i18n.js";
+import { renderTree } from "../mockup/render.js";
+import { openMockupViewer } from "../mockup/viewer.js";
 
 // Resume actions (from the server) that move the process to a step.
 const ACTION_STEP = {
@@ -22,7 +24,7 @@ const ACTION_STEP = {
  * @param send    async (input) => void, posts one turn
  * @param options { pending, error } for the in-flight turn
  */
-export function conversation(state, send, { pending = false, error = null } = {}) {
+export function conversation(state, send, { pending = false, error = null, slow = false } = {}) {
   const { messages } = state;
   const last = messages[messages.length - 1];
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
@@ -30,7 +32,8 @@ export function conversation(state, send, { pending = false, error = null } = {}
 
   return h("section", { class: `conversation card ${pending ? "busy" : ""}`, "aria-live": "polite" },
     messages.map((m) => (m.role === "user" ? userMessage(m) : assistantMessage(m, m === live, send, state))),
-    pending ? h("div", { class: "message assistant thinking" }, author("assistant"), h("p", {}, t("chat.thinking"))) : null,
+    pending ? h("div", { class: "message assistant thinking" }, author("assistant"),
+      h("p", {}, t(slow ? "chat.thinking_mockup" : "chat.thinking"))) : null,
     error ? errorCard(error, send) : null,
     !pending && !error ? resumeCard(state, last, lastAssistant, send) : null,
     composer(state, send, pending));
@@ -43,7 +46,7 @@ function author(role) {
 function userMessage(message) {
   const input = message.content.input ?? {};
   // Answers, role choices and added stories are shown on the card they answer.
-  if (["answer", "roles", "stories", "focus"].includes(input.kind)) return null;
+  if (["answer", "roles", "stories", "focus", "criteria"].includes(input.kind)) return null;
   let text;
   switch (input.kind) {
     case "text": text = input.text; break;
@@ -62,6 +65,7 @@ function assistantMessage(message, live, send, state) {
     c.roles ? rolesCard(message, live, send, state) : null,
     c.stories ? storiesCard(message, live, send) : null,
     c.priority ? priorityCard(message, live, send, state) : null,
+    c.proposal ? proposalCard(message, live, send, state) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
 }
 
@@ -240,6 +244,92 @@ function priorityCard(message, live, send, state) {
       h("button", { type: "button", onclick: () => { others.hidden = !others.hidden; } }, t("chat.priority_choose_other")),
       h("button", { type: "button", class: "primary", onclick: () => focus(recommended) }, t("chat.priority_agree"))),
     others);
+}
+
+// --- criteria and mockup proposal ----------------------------------------
+
+function proposalCard(message, live, send, state) {
+  const p = message.content.proposal;
+  const preview = h("div", { class: "proposal-mockup" }, renderTree(p.mockup));
+  const highlight = (id, on) => {
+    if (!id) return;
+    preview.querySelectorAll(`[data-component-id="${CSS.escape(id)}"]`).forEach((el) => el.classList.toggle("wf-highlight", on));
+  };
+  const open = () => openMockupViewer({ title: p.mockup.title, version: "·", tree: p.mockup });
+  const mockupColumn = h("div", { class: "proposal-side" },
+    h("button", { type: "button", class: "proposal-preview", onclick: open, "aria-label": t("mockup.open", { title: p.mockup.title }) }, preview),
+    h("button", { type: "button", class: "small", onclick: open }, t("chat.open_mockup")));
+
+  if (p.decided || !live) {
+    return h("div", { class: "card-block answered proposal" },
+      h("div", { class: "card-title" }, t("chat.proposal_title", { key: p.story_key })),
+      h("p", { class: "muted" }, p.decided
+        ? t("chat.proposal_decided", { kept: p.decided.kept, rejected: p.decided.rejected })
+        : t("chat.proposal_not_decided")),
+      mockupColumn);
+  }
+
+  // Each row: { index, text, state: pending | accepted | edited | rejected }
+  const rows = p.criteria.map((c, index) => ({ index, text: c.text, component: c.component_id, state: "pending" }));
+  const list = h("ol", { class: "criteria-review" });
+
+  const drawRows = () => {
+    list.replaceChildren(...rows.map((row, i) => criterionRow(row, () => drawRows(), (on) => highlight(row.component, on), () => {
+      rows.splice(i, 1); drawRows();
+    })));
+  };
+  drawRows();
+
+  const submit = () => send({ kind: "criteria", message_id: message.id, items: rows
+    .filter((row) => row.state !== "rejected" && row.text.trim())
+    .map((row) => (row.index === null ? { index: null, text: row.text }
+      : row.state === "edited" ? { index: row.index, text: row.text } : { index: row.index })) });
+
+  return h("div", { class: "card-block proposal" },
+    h("div", { class: "card-title" }, t("chat.proposal_title", { key: p.story_key })),
+    h("div", { class: "proposal-body" },
+      h("div", {}, list,
+        h("div", { class: "card-actions" },
+          h("button", { type: "button", class: "quiet-button", onclick: () => {
+            rows.push({ index: null, text: "", component: null, state: "editing" }); drawRows();
+            list.querySelector("li:last-child input")?.focus();
+          } }, `+ ${t("chat.add_criterion")}`),
+          h("button", { type: "button", class: "primary", onclick: submit }, t("chat.confirm_all")))),
+      mockupColumn));
+}
+
+function criterionRow(row, redraw, highlight, drop) {
+  const editing = row.state === "editing";
+  const input = h("input", { type: "text", maxlength: 300, "aria-label": t("chat.criterion_text") });
+  input.value = row.text;
+  const done = () => {
+    row.text = input.value.trim();
+    if (!row.text && row.index === null) { drop(); return; }
+    row.state = row.index === null ? "edited" : (row.text === row.original ? "accepted" : "edited");
+    redraw();
+  };
+  const item = h("li", { class: `criterion ${row.state}`, onmouseenter: () => highlight(true), onmouseleave: () => highlight(false) },
+    editing
+      ? h("form", { class: "inline-form", onsubmit: (e) => { e.preventDefault(); done(); } }, input,
+        h("button", { type: "submit", class: "small primary" }, t("chat.save_criterion")))
+      : h("span", { class: "criterion-text" }, row.text,
+        row.index === null ? h("span", { class: "hint" }, ` (${t("chat.added")})`) : null,
+        row.state === "edited" && row.index !== null ? h("span", { class: "hint" }, ` (${t("chat.edited")})`) : null),
+    editing ? null : h("span", { class: "criterion-actions" },
+      row.state === "rejected"
+        ? h("button", { type: "button", class: "small", onclick: () => { row.state = "pending"; redraw(); } }, t("chat.restore"))
+        : [
+          h("button", { type: "button", class: `small ${row.state === "accepted" ? "chosen" : ""}`, "aria-pressed": String(row.state === "accepted"),
+            onclick: () => { row.state = "accepted"; redraw(); } }, `✓ ${t("chat.accept")}`),
+          h("button", { type: "button", class: "small", onclick: () => {
+            row.original ??= row.text; row.state = "editing"; redraw();
+          } }, `✎ ${t("chat.edit")}`),
+          h("button", { type: "button", class: "small", onclick: () => {
+            if (row.index === null) drop(); else { row.state = "rejected"; redraw(); }
+          } }, `✗ ${t("chat.remove")}`),
+        ]));
+  if (editing) setTimeout(() => input.focus(), 0);
+  return item;
 }
 
 // --- next steps, resume, errors, composer --------------------------------

@@ -123,6 +123,10 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (story_id, mockup_id)
     );
     """,
+    # 7: which mockup element a criterion is about
+    """
+    ALTER TABLE criteria ADD COLUMN component_id TEXT;
+    """,
 ]
 
 

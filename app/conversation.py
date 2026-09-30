@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from . import backlog, db, projects
+from . import backlog, db, mockups, projects
 from .ai import Task, run_task
 from .projects import Role, Step
 
@@ -53,6 +53,17 @@ class PriorityCard(_Strict):
     reason: str = Field(min_length=1, max_length=400)
 
 
+class ProposedCriterion(_Strict):
+    text: str = Field(min_length=1, max_length=300)
+    component_id: str | None = Field(default=None, max_length=40)
+
+
+class Proposal(_Strict):
+    story_key: str = Field(min_length=1, max_length=20)
+    criteria: list[ProposedCriterion] = Field(min_length=3, max_length=8)
+    mockup: mockups.Tree
+
+
 class NextStep(_Strict):
     label: str = Field(min_length=1, max_length=60)
     kind: Literal["reply", "end_meeting"]
@@ -68,12 +79,15 @@ class Turn(_Strict):
     roles: list[RoleSuggestion] | None = Field(min_length=2, max_length=8)
     stories: list[backlog.StoryParts] | None = Field(default=None, min_length=1, max_length=10)
     priority: PriorityCard | None = None
+    proposal: Proposal | None = None
     next_steps: list[NextStep] = Field(min_length=1, max_length=4)
 
     @model_validator(mode="after")
     def _one_card_and_a_way_on(self):
-        if sum(1 for card in (self.question, self.roles, self.stories, self.priority) if card) > 1:
-            raise ValueError("one card per turn: a question, roles, stories or a priority, not several")
+        cards = (self.question, self.roles, self.stories, self.priority, self.proposal)
+        if sum(1 for card in cards if card) > 1:
+            raise ValueError("one card per turn: a question, roles, stories, a priority or a "
+                             "proposal, not several")
         if not any(s.kind == "reply" for s in self.next_steps):
             raise ValueError("next_steps needs at least one option of kind 'reply'")
         return self
@@ -111,8 +125,21 @@ Rules for this turn:
 - priorities step: recommend the story to start with in `priority`: story_key from INPUT.backlog
   and a one-sentence reason (usually the story without which the rest of the flow is pointless).
   Ask in `message` which story is most important to the client. When INPUT.user_input.kind is
-  "focus" the user chose INPUT.current_story: move to the criteria step and say that acceptance
-  criteria and a mockup for it come next.
+  "focus" the user chose INPUT.current_story: move to the criteria step and, in this same turn,
+  make the proposal described next.
+- criteria step: for INPUT.current_story propose, in `proposal`, 3 to 7 acceptance criteria and a
+  wireframe mockup of the view. Each criterion is ONE simple condition that can be checked with yes
+  or no: no evaluative words (user-friendly, fast, simple, convenient, intuitive, clear, or their
+  Estonian equivalents), never two conditions joined with "and"/"ja"/"ning". For a criterion about
+  what the view shows or lets the user do, set component_id to the id of the mockup component that
+  shows it; null only when the view cannot show it (e.g. an e-mail is sent). The mockup is a tree
+  of components: short unique ids in lowercase with hyphens; only header, card, grid, price_card,
+  form, footer and section have children; set every unused field to null. If
+  INPUT.current_story_detail has a mockup, start from it and keep the ids of what stays. Do not
+  repeat criteria the story already has. When INPUT.user_input.kind is "criteria" the user decided
+  on the proposal: move to the refinements step and offer next steps such as the next story, a
+  backlog review or ending the meeting. A next step cannot pick a story: to work on another story,
+  offer the priorities step (the user chooses the story there), never "work on US-n" directly.
 - Later steps: explain briefly what happens in the step and offer next steps; do not invent
   stories or criteria in the message text.
 - Free text: the user may ignore the buttons and write. If INPUT.open_question is set and the text
@@ -123,7 +150,8 @@ Rules for this turn:
 - Always end with 1 to 4 `next_steps`, the recommended one first; at least one of kind "reply".
   Next steps are moves in the conversation (e.g. suggest different roles, move to a step); never
   duplicate what a card's own buttons do (answering the question, confirming the roles, adding
-  stories or asking for different ones, agreeing to or changing the recommended story).
+  stories or asking for different ones, agreeing to or changing the recommended story, accepting
+  or editing criteria).
   A "reply" is sent back to you as the user's choice; set its `step` when choosing it moves the
   process to that step. Use "end_meeting" only to offer ending the session.
 - You propose; the user decides. Never claim that you saved or changed anything.
@@ -164,6 +192,17 @@ class FocusInput(_Strict):
     story_id: int
 
 
+class CriteriaItem(_Strict):
+    index: int | None = None  # a proposed criterion; None for one the user added
+    text: str | None = Field(default=None, max_length=300)  # the user's wording, if changed
+
+
+class CriteriaInput(_Strict):
+    kind: Literal["criteria"]
+    message_id: int
+    items: list[CriteriaItem] = Field(max_length=15)
+
+
 class NextInput(_Strict):
     kind: Literal["next"]
     label: str = Field(min_length=1, max_length=60)
@@ -174,8 +213,8 @@ class RetryInput(_Strict):
     kind: Literal["retry"]
 
 
-UserInput = Annotated[TextInput | AnswerInput | RolesInput | StoriesInput | FocusInput | NextInput
-                      | RetryInput,
+UserInput = Annotated[TextInput | AnswerInput | RolesInput | StoriesInput | FocusInput
+                      | CriteriaInput | NextInput | RetryInput,
                       Field(discriminator="kind")]
 
 
@@ -254,6 +293,8 @@ def apply_input(conn: sqlite3.Connection, project_id: int, data: Any) -> project
                     raise HTTPException(400, "That message has no recommendation to answer")
                 card["chosen"] = {"key": story.key, "agreed": story.key == card["story_key"]}
                 projects.update_message(conn, message.id, message.content)
+        elif data.kind == "criteria":
+            apply_criteria(conn, project_id, data)
         elif data.kind == "next" and data.step:
             conn.execute("UPDATE projects SET step = ? WHERE id = ?", (data.step, project_id))
 
@@ -274,6 +315,9 @@ def describe(message: projects.Message) -> str:
             line += f" [proposed {len(content['stories'])} stories]"
         if content.get("priority"):
             line += f" [recommended starting with {content['priority']['story_key']}]"
+        if content.get("proposal"):
+            line += (f" [proposed {len(content['proposal']['criteria'])} criteria and a mockup "
+                     f"for {content['proposal']['story_key']}]")
         return line
     data = content.get("input", {})
     match data.get("kind"):
@@ -289,6 +333,8 @@ def describe(message: projects.Message) -> str:
             return f"Added {len(data['selected'])} of the proposed stories to the backlog"
         case "focus":
             return "Chose the story to start with"
+        case "criteria":
+            return f"Decided on the proposal: kept {len(data['items'])} criteria and the mockup"
         case "next":
             return f"Chose: {data['label']}"
         case _:
@@ -312,6 +358,7 @@ def build_payload(conn: sqlite3.Connection, project_id: int, data: Any,
         "roles": [r.model_dump() for r in projects.roles(conn, project_id)],
         "backlog": backlog.snapshot(conn, project_id),
         "current_story": _current_key(conn, project),
+        "current_story_detail": _current_detail(conn, project),
         "open_question": pending.content["question"]["text"] if pending else None,
         "recent_messages": [{"role": m.role, "text": describe(m)}
                             for m in history[-RECENT_MESSAGES:]],
@@ -335,17 +382,24 @@ def mock_turn(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload["user_input"]
     reply = lambda label, step=None: {"label": label, "kind": "reply", "step": step}  # noqa: E731
     base = {"interpreted_answer": None, "noted_fact": None, "question": None, "roles": None,
-            "stories": None, "priority": None}
+            "stories": None, "priority": None, "proposal": None}
     answered = len(payload["clarifications"])
     if payload["open_question"] and data["kind"] == "text":
         base["interpreted_answer"] = data["text"][:300]
         answered += 1
 
-    if data["kind"] == "focus":
+    if data["kind"] == "criteria":
+        return {**base, "step": "refinements",
+                "message": "Kriteeriumid ja mockup on loos. Kui klient soovib midagi täpsustada, "
+                           "kirjuta see siia. Mida teeme edasi?",
+                "next_steps": [reply("Järgmine lugu", "priorities"),
+                               reply("Vaatame backlog'i üle", "grooming"),
+                               {"label": "Lõpetame kohtumise", "kind": "end_meeting", "step": None}]}
+    if payload["current_story"] and (data["kind"] == "focus" or payload["step"] == "criteria"):
         return {**base, "step": "criteria",
-                "message": f"Alustame lool {payload['current_story']}. Järgmiseks pakun sellele "
-                           "vastuvõtukriteeriumid ja mockup'i.",
-                "next_steps": [reply("Paku kriteeriumid ja mockup", "criteria")]}
+                "message": f"Pakun loole {payload['current_story']} vastuvõtukriteeriumid ja mockup'i.",
+                "proposal": mock_proposal(payload),
+                "next_steps": [reply("Paku teistsugune mockup", "criteria")]}
     if data["kind"] == "stories" or (payload["step"] == "priorities" and payload["backlog"]):
         first = payload["backlog"][0]
         return {**base, "step": "priorities",
@@ -415,6 +469,16 @@ def check_turn(turn: Turn, payload: dict[str, Any]) -> str | None:
     if asked_for_priority and keys and not turn.priority:
         return ("The process is at the priorities step: recommend the story to start with in "
                 "`priority`, with a reason, in this same turn.")
+    if turn.proposal:
+        problem = _check_proposal(turn.proposal, payload)
+        if problem:
+            return problem
+    wants_proposal = payload.get("current_story") and (
+        payload["user_input"]["kind"] == "focus"
+        or (payload["user_input"]["kind"] == "next" and payload["user_input"].get("step") == "criteria"))
+    if wants_proposal and not turn.proposal:
+        return (f"The user chose {payload['current_story']}: propose its acceptance criteria and "
+                "mockup in `proposal` in this same turn.")
     if turn.stories:
         if not payload["backlog"] and len(turn.stories) < MIN_FIRST_STORIES:
             return (f"The backlog is empty: propose at least {MIN_FIRST_STORIES} stories for the "
@@ -425,6 +489,114 @@ def check_turn(turn: Turn, payload: dict[str, Any]) -> str | None:
             return (f"Stories use roles that are not in INPUT.roles: {strangers}. Use role_name "
                     "exactly as listed there, or propose the new role separately.")
     return None
+
+
+def _current_detail(conn: sqlite3.Connection, project: projects.Project) -> dict | None:
+    """The chosen story as the AI needs it for a proposal: wording, criteria, current mockup."""
+    if project.current_story_id is None:
+        return None
+    try:
+        story = backlog.get_story(conn, project.id, project.current_story_id)
+    except HTTPException:
+        return None
+    linked = [m for m in mockups.mockups(conn, project.id) if m.id in story.mockup_ids]
+    return {"key": story.key, "title": story.title, "role_name": story.role_name,
+            "criteria": [c.text for c in story.criteria],
+            "mockup": linked[0].tree.model_dump() if linked else None}
+
+
+def _check_proposal(proposal: Proposal, payload: dict[str, Any]) -> str | None:
+    current = payload.get("current_story")
+    if current and proposal.story_key != current:
+        return f"The proposal is for {proposal.story_key}, but the chosen story is {current}."
+    ids = mockups.component_ids(proposal.mockup)
+    dangling = [c.component_id for c in proposal.criteria if c.component_id and c.component_id not in ids]
+    if dangling:
+        return (f"Criteria refer to components that are not in the mockup: {dangling}. Use ids "
+                f"from the mockup: {sorted(ids)}.")
+    if not any(c.component_id for c in proposal.criteria):
+        return ("No criterion refers to the mockup: set component_id on every criterion about "
+                "what the view shows.")
+    return None
+
+
+def apply_criteria(conn: sqlite3.Connection, project_id: int, data: CriteriaInput) -> None:
+    """Store the user's decision on a proposal. Called inside the input's transaction."""
+    message = projects.get_message(conn, project_id, data.message_id)
+    proposal = message.content.get("proposal") if message.role == "assistant" else None
+    if not proposal:
+        raise HTTPException(400, "That message has no proposal to decide on")
+    if "decided" in proposal:
+        raise HTTPException(409, "That proposal was already decided on")
+    key = proposal["story_key"]
+    story = next((s for s in backlog.stories(conn, project_id) if s.key == key), None)
+    if story is None:
+        raise HTTPException(409, f"Story {key} is no longer in the backlog")
+    offered = proposal["criteria"]
+    indexes = [item.index for item in data.items if item.index is not None]
+    if len(set(indexes)) != len(indexes) or not all(0 <= i < len(offered) for i in indexes):
+        raise HTTPException(422, "Criteria must refer to distinct proposed criteria")
+
+    kept: list[tuple[str, backlog.Origin, str | None]] = []
+    for item in data.items:
+        written = " ".join((item.text or "").split())
+        if item.index is None:
+            if not written:
+                raise HTTPException(422, "An added criterion needs text")
+            kept.append((written, "manual", None))
+        else:
+            original = offered[item.index]
+            edited = written and written != original["text"]
+            kept.append((written if edited else original["text"], "manual" if edited else "ai",
+                         original["component_id"]))
+
+    backlog.record_undo(conn, project_id, "criteria_added", key=key, count=len(kept))
+    backlog.append_criteria(conn, story.id, kept)
+    tree = mockups.Tree(**proposal["mockup"])
+    if story.mockup_ids:
+        mockup_id = story.mockup_ids[0]
+        mockups.add_version(conn, mockup_id, tree, note=f"proposal:{message.id}")
+    else:
+        mockup_id = mockups.create(conn, project_id, tree, note=f"proposal:{message.id}",
+                                   story_id=story.id).id
+    proposal["decided"] = {"kept": len(kept), "rejected": len(offered) - len(indexes),
+                           "mockup_id": mockup_id}
+    projects.update_message(conn, message.id, message.content)
+
+
+MOCK_PROPOSALS = {
+    # keyword in the story's action -> (template, [(criterion, component id)])
+    "pakett": ("pricing", [("Lehel on iga paketi nimi.", "package-basic"),
+                           ("Iga paketi juures on kuutasu eurodes.", "package-plus"),
+                           ("Iga paketi juures on nupp „Vali“.", "package-basic-choose"),
+                           ("Paketid on kuvatud kõrvuti võrdlemiseks.", "packages")]),
+    "hind": ("pricing", [("Lehel on iga paketi nimi.", "package-basic"),
+                         ("Iga paketi juures on kuutasu eurodes.", "package-plus"),
+                         ("Iga paketi juures on nupp „Vali“.", "package-basic-choose")]),
+    "konto": ("form", [("Vormis on nõutud väli „E-post“.", "email"),
+                       ("Vorm ei lase saata tühja e-posti väljaga.", "email"),
+                       ("Vormis on nupp „Saada“.", "submit"),
+                       ("Tingimustega nõustumine on kohustuslik.", "terms")]),
+    "tasu": ("checkout", [("Kokkuvõttes on valitud paketi hind.", "order"),
+                          ("Hinna juures on märge, kas hind sisaldab käibemaksu.", "vat-note"),
+                          ("Lehel on nupp „Maksa“.", "pay")]),
+    "kinnitus": ("confirmation", [("Pärast liitumist kuvatakse kinnitusteade.", "success"),
+                                  ("Kinnitusel on tellimuse number.", "summary"),
+                                  ("Kinnitus saadetakse e-postile.", None)]),
+}
+
+
+def mock_proposal(payload: dict[str, Any]) -> dict[str, Any]:
+    from .mockup_templates import TEMPLATES
+    detail = payload["current_story_detail"] or {}
+    title = detail.get("title", "")
+    template, criteria = next((v for k, v in MOCK_PROPOSALS.items() if k in title),
+                              ("detail", [("Lehel on kirje nimi.", "detail-title"),
+                                          ("Lehel on kirje kirjeldus.", "detail-text"),
+                                          ("Lehel on nupp „Vali see“.", "detail-cta")]))
+    return {"story_key": payload["current_story"],
+            "criteria": [{"text": text, "component_id": cid} for text, cid in criteria],
+            "mockup": TEMPLATES[template][1]}
 
 
 def _current_key(conn: sqlite3.Connection, project: projects.Project) -> str | None:
@@ -463,6 +635,7 @@ async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> pro
         "roles": [r.model_dump() for r in turn.roles] if turn.roles else None,
         "stories": [st.model_dump() for st in turn.stories] if turn.stories else None,
         "priority": turn.priority.model_dump() if turn.priority else None,
+        "proposal": turn.proposal.model_dump() if turn.proposal else None,
         "next_steps": [s.model_dump() for s in turn.next_steps],
     })
     return projects.state(conn, project_id)

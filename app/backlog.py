@@ -68,6 +68,7 @@ class Criterion(BaseModel):
     id: int
     text: str
     origin: Origin
+    component_id: str | None = None
 
 
 class Story(StoryParts):
@@ -117,7 +118,8 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
             "SELECT c.* FROM criteria c JOIN stories s ON s.id = c.story_id "
             "WHERE s.project_id = ? ORDER BY c.position, c.id", (project_id,)):
         criteria.setdefault(row["story_id"], []).append(
-            Criterion(id=row["id"], text=row["text"], origin=row["origin"]))
+            Criterion(id=row["id"], text=row["text"], origin=row["origin"],
+                      component_id=row["component_id"]))
     links: dict[int, list[int]] = {}
     for row in conn.execute(
             "SELECT l.story_id, l.mockup_id FROM story_mockups l JOIN stories s ON s.id = l.story_id "
@@ -242,10 +244,24 @@ def _set_criteria(conn: sqlite3.Connection, story_id: int, texts: list[str], ori
     conn.execute("DELETE FROM criteria WHERE story_id = ?", (story_id,))
     for position, text in enumerate(texts):
         old = existing.get(text)
-        conn.execute("INSERT INTO criteria (id, story_id, text, position, origin, created_at) "
-                     "VALUES (?, ?, ?, ?, ?, ?)",
+        conn.execute("INSERT INTO criteria (id, story_id, text, position, origin, created_at, "
+                     "component_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                      (old["id"] if old else None, story_id, text, position,
-                      old["origin"] if old else origin, old["created_at"] if old else db.now()))
+                      old["origin"] if old else origin, old["created_at"] if old else db.now(),
+                      old["component_id"] if old else None))
+
+
+def append_criteria(conn: sqlite3.Connection, story_id: int,
+                    new: list[tuple[str, Origin, str | None]]) -> None:
+    """Add (text, origin, component_id) criteria after the story's existing ones."""
+    position = conn.execute("SELECT COALESCE(MAX(position), -1) FROM criteria WHERE story_id = ?",
+                            (story_id,)).fetchone()[0]
+    stamp = db.now()
+    for text, origin, component_id in new:
+        position += 1
+        conn.execute("INSERT INTO criteria (story_id, text, position, origin, created_at, component_id) "
+                     "VALUES (?, ?, ?, ?, ?, ?)", (story_id, text, position, origin, stamp, component_id))
+    conn.execute("UPDATE stories SET updated_at = ? WHERE id = ?", (stamp, story_id))
 
 
 def add_stories(conn: sqlite3.Connection, project_id: int, new: list[StoryParts],
