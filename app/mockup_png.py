@@ -11,13 +11,14 @@ Every renderer takes (node, x, y, width) and returns the height it used; with
 from __future__ import annotations
 
 import io
+import math
 import os
 from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .mockups import Component, Tree
+from .mockups import Annotation, Component, Tree
 
 WIDTH = 1024
 PAD = 24
@@ -61,6 +62,7 @@ def wrap(text: str, fnt: ImageFont.FreeTypeFont, width: float) -> list[str]:
 class Painter:
     def __init__(self, draw: ImageDraw.ImageDraw | None):
         self.d = draw
+        self.boxes: dict[str, tuple[float, float, float, float]] = {}  # id -> x, y, w, h
 
     # --- primitives -------------------------------------------------------
 
@@ -121,7 +123,9 @@ class Painter:
 
     def node(self, n: Component, x, y, w, min_height: int = 0) -> int:
         method = getattr(self, f"c_{n.type}", self.c_text)
-        return method(n, x, y, w, min_height) if n.type in ("card", "price_card") else method(n, x, y, w)
+        h = method(n, x, y, w, min_height) if n.type in ("card", "price_card") else method(n, x, y, w)
+        self.boxes[n.id] = (x, y, w, h)
+        return h
 
     def c_header(self, n, x, y, w):
         inner = self.inline(n.children or [], x, y, w - 32, measure_only=True)
@@ -147,6 +151,7 @@ class Painter:
             return 32
         cx = x
         for c in nodes:
+            start = cx
             if c.type == "nav":
                 for item in c.items or []:
                     self.text(cx, y + 7, 400, item, underline=True)
@@ -154,6 +159,7 @@ class Painter:
             elif c.type == "button":
                 bw, _ = self.button(cx, y, c.text or "", c.variant)
                 cx += bw + 12
+            self.boxes[c.id] = (start, y, cx - start, 32)
         return 32
 
     def c_nav(self, n, x, y, w):
@@ -320,12 +326,53 @@ class Painter:
         return 24
 
 
-def render_png(tree: Tree) -> bytes:
-    """The whole view as PNG bytes, as tall as its content."""
+MARK_COLORS = {"red": (224, 49, 49), "blue": (28, 126, 214), "green": (47, 158, 68)}
+NOTE_FILL = (255, 243, 191)
+
+
+def absolute(mark: Annotation, boxes: dict[str, tuple[float, float, float, float]]) -> list[tuple[float, float]]:
+    """A mark's points on this rendering: relative to its anchor's box, or to the view."""
+    ox, oy = boxes[mark.anchor][:2] if mark.anchor in boxes else (0, 0)
+    return [(ox + x, oy + y) for x, y in mark.points]
+
+
+def draw_marks(draw: ImageDraw.ImageDraw, marks: list[Annotation], boxes) -> None:
+    for mark in marks:
+        points = absolute(mark, boxes)
+        color = MARK_COLORS[mark.color]
+        if mark.tool == "rect":
+            (x1, y1), (x2, y2) = points
+            draw.rectangle((min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)), outline=color, width=3)
+        elif mark.tool == "pen":
+            draw.line(points, fill=color, width=3, joint="curve")
+        elif mark.tool == "arrow":
+            (x1, y1), (x2, y2) = points
+            draw.line((x1, y1, x2, y2), fill=color, width=3)
+            angle = math.atan2(y2 - y1, x2 - x1)
+            for side in (-0.5, 0.5):
+                draw.line((x2, y2, x2 - 14 * math.cos(angle + side), y2 - 14 * math.sin(angle + side)), fill=color, width=3)
+        elif mark.tool == "note":
+            (x, y), fnt = points[0], font(13)
+            lines = wrap(mark.text or "", fnt, 200)
+            h = 10 + 18 * len(lines)
+            draw.rectangle((x, y, x + 216, y + h), fill=NOTE_FILL, outline=color, width=2)
+            for i, line in enumerate(lines):
+                draw.text((x + 8, y + 5 + i * 18), line, font=fnt, fill=INK)
+
+
+def render_png(tree: Tree, annotations: list[Annotation] | None = None) -> bytes:
+    """The whole view as PNG bytes, as tall as its content (and its annotations)."""
     width = WIDTH - 2 * PAD
-    height = min(MAX_HEIGHT, PAD * 2 + Painter(None).stack(tree.components, PAD, PAD, width, gap=GAP))
+    measure = Painter(None)
+    height = PAD * 2 + measure.stack(tree.components, PAD, PAD, width, gap=GAP)
+    for mark in annotations or []:  # a mark below the content makes the image taller
+        lowest = max(y for _, y in absolute(mark, measure.boxes))
+        height = max(height, int(lowest) + (120 if mark.tool == "note" else 20))
+    height = min(MAX_HEIGHT, height)
     image = Image.new("RGB", (WIDTH, height), WHITE)
-    Painter(ImageDraw.Draw(image)).stack(tree.components, PAD, PAD, width, gap=GAP)
+    painter = Painter(ImageDraw.Draw(image))
+    painter.stack(tree.components, PAD, PAD, width, gap=GAP)
+    draw_marks(ImageDraw.Draw(image), annotations or [], painter.boxes)
     out = io.BytesIO()
     image.save(out, "PNG", optimize=True)
     return out.getvalue()

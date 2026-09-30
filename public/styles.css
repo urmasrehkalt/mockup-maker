@@ -670,3 +670,19 @@ dialog.mockup-editor { width: min(1400px, calc(100vw - 24px)); max-height: calc(
   .editor-body { grid-template-columns: 1fr; }
   .inspector { position: static; }
 }
+
+/* --- annotation layer ------------------------------------------------- */
+
+.artboard { width: 100%; overflow: hidden; }
+.artboard-scale { position: relative; width: 1024px; transform-origin: 0 0; }
+.wf.wf-fixed { width: 1024px; }
+.mark-layer { position: absolute; inset: 0 auto auto 0; pointer-events: none; overflow: visible; }
+.artboard.editable .mark-layer { pointer-events: all; cursor: crosshair; }
+.artboard.editable[data-tool="eraser"] .mark-layer { cursor: not-allowed; }
+.artboard.editable[data-tool="eraser"] .mark:hover { opacity: 0.4; }
+.mark-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.mark-toolbar .spacer { flex: 1; }
+.mark-toolbar input[type="text"] { width: 260px; }
+.swatches { display: flex; gap: 4px; }
+.swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; background: var(--swatch); border: 2px solid transparent; }
+.swatch[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface) inset; }

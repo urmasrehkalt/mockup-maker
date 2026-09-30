@@ -11,6 +11,7 @@ checked here and fed back to the model on a retry.
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from typing import Literal
@@ -131,6 +132,51 @@ def component_ids(tree: Tree) -> set[str]:
     return ids
 
 
+# --- annotations ---------------------------------------------------------
+
+Point = tuple[float, float]
+
+
+class Annotation(BaseModel):
+    """A freehand mark on top of a mockup, in pixels of a 1024-wide view.
+
+    Points are relative to the top-left corner of the `anchor` component (the one
+    under the first point when it was drawn), so the mark stays with that component
+    in both renderers (browser and PNG), whose layouts differ slightly. Without an
+    anchor, or when the anchor is gone, points are relative to the whole view.
+    """
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    id: str = Field(min_length=1, max_length=40)
+    tool: Literal["rect", "arrow", "pen", "note"]
+    anchor: str | None = Field(default=None, max_length=40)
+    points: list[Point] = Field(min_length=1, max_length=500)
+    text: str | None = Field(default=None, max_length=200)
+    color: Literal["red", "blue", "green"] = "red"
+
+    @model_validator(mode="after")
+    def _shape(self):
+        needed = {"rect": (2, 2), "arrow": (2, 2), "pen": (2, 500), "note": (1, 1)}[self.tool]
+        if not needed[0] <= len(self.points) <= needed[1]:
+            raise ValueError(f"a {self.tool} needs {needed[0]}" + ("" if needed[0] == needed[1] else f" to {needed[1]}") + " points")
+        if self.tool == "note" and not self.text:
+            raise ValueError("a note needs text")
+        if any(not (-2000 <= c <= 20000) for point in self.points for c in point):
+            raise ValueError("annotation points are out of range")
+        return self
+
+
+class AnnotationsIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    annotations: list[Annotation] = Field(max_length=200)
+
+    @model_validator(mode="after")
+    def _unique(self):
+        ids = [a.id for a in self.annotations]
+        if len(set(ids)) != len(ids):
+            raise ValueError("annotation ids must be unique")
+        return self
+
+
 # --- models for the API --------------------------------------------------
 
 class MockupIn(BaseModel):
@@ -152,6 +198,7 @@ class Mockup(BaseModel):
     title: str
     version: int
     tree: Tree
+    annotations: list[Annotation] = []
     story_ids: list[int]
     updated_at: str
 
@@ -166,6 +213,7 @@ class Version(BaseModel):
     note: str
     created_at: str
     tree: Tree
+    annotations: list[Annotation] = []
 
 
 class Template(BaseModel):
@@ -182,7 +230,7 @@ def templates() -> list[Template]:
 
 def mockups(conn: sqlite3.Connection, project_id: int) -> list[Mockup]:
     rows = conn.execute(
-        "SELECT m.id, m.title, m.updated_at, v.number, v.tree FROM mockups m "
+        "SELECT m.id, m.title, m.updated_at, v.number, v.tree, v.annotations FROM mockups m "
         "JOIN mockup_versions v ON v.mockup_id = m.id AND v.number = "
         "(SELECT MAX(number) FROM mockup_versions WHERE mockup_id = m.id) "
         "WHERE m.project_id = ? ORDER BY m.id", (project_id,)).fetchall()
@@ -192,8 +240,12 @@ def mockups(conn: sqlite3.Connection, project_id: int) -> list[Mockup]:
                             "ORDER BY l.story_id", (project_id,)):
         links.setdefault(row["mockup_id"], []).append(row["story_id"])
     return [Mockup(id=r["id"], title=r["title"], version=r["number"],
-                   tree=Tree.model_validate_json(r["tree"]), story_ids=links.get(r["id"], []),
-                   updated_at=r["updated_at"]) for r in rows]
+                   tree=Tree.model_validate_json(r["tree"]), annotations=_annotations(r["annotations"]),
+                   story_ids=links.get(r["id"], []), updated_at=r["updated_at"]) for r in rows]
+
+
+def _annotations(raw: str) -> list[Annotation]:
+    return [Annotation(**a) for a in json.loads(raw or "[]")]
 
 
 def get_mockup(conn: sqlite3.Connection, project_id: int, mockup_id: int) -> Mockup:
@@ -217,12 +269,20 @@ def create(conn: sqlite3.Connection, project_id: int, tree: Tree, note: str,
     return get_mockup(conn, project_id, cur.lastrowid)
 
 
-def add_version(conn: sqlite3.Connection, mockup_id: int, tree: Tree, note: str) -> int:
-    number = conn.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM mockup_versions "
-                          "WHERE mockup_id = ?", (mockup_id,)).fetchone()[0]
+def add_version(conn: sqlite3.Connection, mockup_id: int, tree: Tree, note: str,
+                annotations: list[Annotation] | None = None) -> int:
+    """Store a new version. Annotations default to the previous version's: a new
+    layout from the AI or the editor should not throw away the user's notes."""
+    latest = conn.execute("SELECT number, annotations FROM mockup_versions WHERE mockup_id = ? "
+                          "ORDER BY number DESC LIMIT 1", (mockup_id,)).fetchone()
+    number = (latest["number"] if latest else 0) + 1
+    if annotations is None:
+        marks = latest["annotations"] if latest else "[]"
+    else:
+        marks = json.dumps([a.model_dump() for a in annotations], ensure_ascii=False)
     stamp = db.now()
-    conn.execute("INSERT INTO mockup_versions (mockup_id, number, tree, note, created_at) "
-                 "VALUES (?, ?, ?, ?, ?)", (mockup_id, number, tree.model_dump_json(), note, stamp))
+    conn.execute("INSERT INTO mockup_versions (mockup_id, number, tree, note, created_at, annotations) "
+                 "VALUES (?, ?, ?, ?, ?, ?)", (mockup_id, number, tree.model_dump_json(), note, stamp, marks))
     conn.execute("UPDATE mockups SET title = ?, updated_at = ? WHERE id = ?",
                  (tree.title, stamp, mockup_id))
     return number
@@ -252,10 +312,11 @@ def update_for_story(conn: sqlite3.Connection, project_id: int, story_id: int, m
 
 def versions(conn: sqlite3.Connection, project_id: int, mockup_id: int) -> list[Version]:
     get_mockup(conn, project_id, mockup_id)
-    rows = conn.execute("SELECT number, note, created_at, tree FROM mockup_versions "
+    rows = conn.execute("SELECT number, note, created_at, tree, annotations FROM mockup_versions "
                         "WHERE mockup_id = ? ORDER BY number", (mockup_id,)).fetchall()
     return [Version(number=r["number"], note=r["note"], created_at=r["created_at"],
-                    tree=Tree.model_validate_json(r["tree"])) for r in rows]
+                    tree=Tree.model_validate_json(r["tree"]), annotations=_annotations(r["annotations"]))
+            for r in rows]
 
 
 def restore(conn: sqlite3.Connection, project_id: int, mockup_id: int, number: int) -> Mockup:
@@ -269,7 +330,7 @@ def restore(conn: sqlite3.Connection, project_id: int, mockup_id: int, number: i
         raise HTTPException(409, "That version is already the newest")
     with conn:
         backlog.record_undo(conn, project_id, "mockup_restored", title=mockup.title, version=number)
-        add_version(conn, mockup_id, old.tree, note=f"restore:{number}")
+        add_version(conn, mockup_id, old.tree, note=f"restore:{number}", annotations=old.annotations)
         db.touch_project(conn, project_id)
     return get_mockup(conn, project_id, mockup_id)
 
@@ -282,6 +343,18 @@ def save_edit(conn: sqlite3.Connection, project_id: int, mockup_id: int, tree: T
     with conn:
         backlog.record_undo(conn, project_id, "mockup_edited", title=mockup.title)
         add_version(conn, mockup_id, tree, note="manual")
+        db.touch_project(conn, project_id)
+    return get_mockup(conn, project_id, mockup_id)
+
+
+def annotate(conn: sqlite3.Connection, project_id: int, mockup_id: int, annotations: list[Annotation]) -> Mockup:
+    """Save the annotation layer as a new version of the same view."""
+    mockup = get_mockup(conn, project_id, mockup_id)
+    if annotations == mockup.annotations:
+        return mockup
+    with conn:
+        backlog.record_undo(conn, project_id, "mockup_annotated", title=mockup.title)
+        add_version(conn, mockup_id, mockup.tree, note="annotations", annotations=annotations)
         db.touch_project(conn, project_id)
     return get_mockup(conn, project_id, mockup_id)
 
@@ -353,6 +426,12 @@ def list_versions(project_id: int, mockup_id: int, conn: sqlite3.Connection = De
 def post_version(project_id: int, mockup_id: int, data: TreeIn,
                  conn: sqlite3.Connection = Depends(db.get_db)):
     return save_edit(conn, project_id, mockup_id, data.tree)
+
+
+@router.put("/api/projects/{project_id}/mockups/{mockup_id}/annotations", response_model=Mockup)
+def put_annotations(project_id: int, mockup_id: int, data: AnnotationsIn,
+                    conn: sqlite3.Connection = Depends(db.get_db)):
+    return annotate(conn, project_id, mockup_id, data.annotations)
 
 
 @router.post("/api/projects/{project_id}/mockups/{mockup_id}/versions/{number}/restore",

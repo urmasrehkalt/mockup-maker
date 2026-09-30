@@ -50,6 +50,7 @@ export const api = {
   templates: () => request("GET", "/api/mockup-templates"),
   checkCriteria: (texts) => request("POST", "/api/criteria/check", { texts }),
   mockupVersions: (id, mockupId) => request("GET", `/api/projects/${id}/mockups/${mockupId}/versions`),
+  saveAnnotations: (id, mockupId, annotations) => request("PUT", `/api/projects/${id}/mockups/${mockupId}/annotations`, { annotations }),
   saveMockupVersion: (id, mockupId, tree) => request("POST", `/api/projects/${id}/mockups/${mockupId}/versions`, { tree }),
   restoreVersion: (id, mockupId, number) => request("POST", `/api/projects/${id}/mockups/${mockupId}/versions/${number}/restore`),
   createMockup: (id, data) => request("POST", `/api/projects/${id}/mockups`, data),

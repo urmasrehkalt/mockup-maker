@@ -158,7 +158,7 @@ def _push_story(conn: sqlite3.Connection, project_id: int, story: backlog.Story,
     digest = link["mockup_hash"] if link else None
     linked = [all_mockups[m] for m in story.mockup_ids if m in all_mockups]
     if linked:
-        image = render_png(linked[0].tree)
+        image = render_png(linked[0].tree, linked[0].annotations)
         new_digest = hashlib.sha256(image).hexdigest()
         if len(image) > MAX_IMAGE_BYTES:
             result.mockup, result.message = "failed", "The mockup image is larger than 5 MB"
@@ -222,12 +222,12 @@ def mockup_png(project_id: int, mockup_id: int, version: int | None = None,
                conn: sqlite3.Connection = Depends(db.get_db)):
     if version is None:
         mockup = mockups.get_mockup(conn, project_id, mockup_id)
-        tree, number = mockup.tree, mockup.version
+        tree, number, marks = mockup.tree, mockup.version, mockup.annotations
     else:
         found = next((v for v in mockups.versions(conn, project_id, mockup_id) if v.number == version), None)
         if found is None:
             raise HTTPException(404, "Version not found")
-        tree, number = found.tree, found.number
-    image = render_png(tree)
+        tree, number, marks = found.tree, found.number, found.annotations
+    image = render_png(tree, marks)
     return Response(image, media_type="image/png", headers={
         "Content-Disposition": f'inline; filename="mockup-{mockup_id}-v{number}.png"'})

@@ -145,6 +145,10 @@ MIGRATIONS: list[str] = [
         pushed_at         TEXT NOT NULL
     );
     """,
+    # 11: freehand annotations drawn on top of a mockup version
+    """
+    ALTER TABLE mockup_versions ADD COLUMN annotations TEXT NOT NULL DEFAULT '[]';
+    """,
 ]
 
 
