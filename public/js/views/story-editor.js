@@ -3,7 +3,7 @@
 import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
-import { errorText, issueList, notice } from "../ui.js";
+import { errorText, issueList, notice, readinessList } from "../ui.js";
 import { storyMockups } from "../mockup/story-mockups.js";
 
 const STATUSES = ["idea", "needs_clarification", "reviewed", "ready"];
@@ -31,9 +31,13 @@ export function openStoryEditor(state, story, reload) {
   const status = h("select", { id: "st-status" }, STATUSES.map((v) => h("option", { value: v }, t(`status.${v}`))));
   status.value = story?.status ?? "idea";
   const notes = field("textarea", { id: "st-notes", rows: 2, maxlength: 2000 }, story?.notes);
+  const needsView = h("input", { type: "checkbox", id: "st-view", checked: story?.needs_view ?? true });
   const criteria = lineList(story?.criteria.map((c) => c.text) ?? [], t("editor.add_criterion"), t("editor.criterion_hint"), true);
   const questions = lineList(story?.open_questions ?? [], t("editor.add_question"), t("editor.question_hint"));
   const preview = h("p", { class: "title-preview" });
+  status.addEventListener("change", () => {
+    if (status.value === "needs_clarification" && !questions.values().length) questions.addLine("", true);
+  });
   const errors = h("div", { class: "form-status" });
 
   const updatePreview = () => {
@@ -62,6 +66,7 @@ export function openStoryEditor(state, story, reload) {
     const data = {
       role_name: roleName.value, role_phrase: rolePhrase.value, action: action.value, benefit: benefit.value,
       status: status.value, criteria: criteria.values(), open_questions: questions.values(), notes: notes.value,
+      needs_view: needsView.checked,
     };
     if (size.value) data.size = size.value; else if (!isNew) data.clear_size = true;
     try {
@@ -70,7 +75,9 @@ export function openStoryEditor(state, story, reload) {
       close();
       await reload();
     } catch (error) {
-      mount(errors, notice(errorText(error), "error"));
+      mount(errors, notice(errorText(error), "error"),
+        error.code === "not_ready" ? readinessList({ needs_view: needsView.checked }, error.details.missing) : null);
+      errors.scrollIntoView({ block: "nearest" });
     }
   }
 
@@ -98,6 +105,10 @@ export function openStoryEditor(state, story, reload) {
     h("div", { class: "grid-2" },
       h("div", {}, label("st-size", t("editor.size")), size),
       h("div", {}, label("st-status", t("editor.status")), status)),
+    h("label", { class: "check", for: "st-view" }, needsView, t("editor.needs_view")),
+    story ? h("details", { class: "ready-box", open: story.readiness.length > 0 },
+      h("summary", {}, story.readiness.length ? t("ready.summary_missing", { count: story.readiness.length }) : t("ready.summary_ok")),
+      readinessList(story)) : null,
     h("fieldset", {}, h("legend", {}, t("editor.criteria")), criteria.element),
     h("fieldset", {}, h("legend", {}, t("editor.questions")), questions.element),
     label("st-notes", t("editor.notes")), notes,
@@ -141,5 +152,5 @@ function lineList(initial, addLabel, placeholder, checked = false) {
   initial.forEach((value) => addLine(value));
   const element = h("div", {}, list,
     h("button", { type: "button", class: "small", onclick: () => addLine("", true) }, `+ ${addLabel}`));
-  return { element, values: () => [...list.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean) };
+  return { element, addLine, values: () => [...list.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean) };
 }

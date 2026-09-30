@@ -285,6 +285,7 @@ def unlink(conn: sqlite3.Connection, project_id: int, story_id: int, mockup_id: 
         backlog.record_undo(conn, project_id, "mockup_unlinked", key=story.key)
         conn.execute("DELETE FROM story_mockups WHERE story_id = ? AND mockup_id = ?",
                      (story_id, mockup_id))
+        backlog.check_status(conn, project_id, story_id, None)
         db.touch_project(conn, project_id)
 
 

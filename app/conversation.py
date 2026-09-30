@@ -726,6 +726,7 @@ def apply_change(conn: sqlite3.Connection, project_id: int, data: ChangeInput) -
         change["decided"] = {"applied": True, "mockup_id": mockup_id, "version": version}
     else:
         change["decided"] = {"applied": True}
+    backlog.check_status(conn, project_id, story.id, None)
     projects.update_message(conn, message.id, message.content)
 
 

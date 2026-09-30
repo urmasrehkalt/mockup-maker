@@ -68,6 +68,7 @@ function storyRow(story, index, stories, move, edit, current) {
         warned(story) ? h("span", { class: "warn-count", title: t("backlog.untestable") }, `⚠ ${warned(story)}`) : null,
         story.mockup_ids.length ? h("span", { class: "muted", title: t("mockup.section") }, t("backlog.mockup_count", { count: story.mockup_ids.length })) : null,
         story.open_questions.length ? h("span", { class: "open-q" }, `? ${story.open_questions.length}`) : null,
+        story.status !== "ready" && !story.readiness.length ? h("span", { class: "dor-ok", title: t("ready.summary_ok") }, "DoR ✓") : null,
         h("span", { class: "origin", title: t(`backlog.origin.${story.origin}`) }, story.origin === "ai" ? "AI" : "✎")),
       h("span", { class: "story-title" }, story.title)),
     h("span", { class: "row-moves" },

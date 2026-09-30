@@ -18,7 +18,8 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
 - `app/backlog.py`: stories. Connextra parts stored separately (`role_name`, `role_phrase` =
   Estonian essive as the title starts, `action`, `benefit`); the title is always composed, never stored.
   Every backlog change calls `record_undo()` first in the same transaction; `undo()` restores rows
-  in place (upsert, never delete-and-reinsert) so links to surviving stories are kept
+  in place (upsert, never delete-and-reinsert) so links to surviving stories are kept. Definition of Ready
+  lives in `readiness()`; every change that can affect it calls `check_status()` in its transaction
 - `app/conversation.py`: guided conversation, one `POST /turn` per user input. User decisions
   (answers, roles, notes) are stored before the AI call; the AI payload is built from DB state;
   `check_turn` holds state-aware rules (question minimum/cap) retried via `run_task(check=...)`

@@ -1,10 +1,11 @@
 // JSON API client. Errors become ApiError with the server's code when it sent one.
 
 export class ApiError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, details = {}) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -17,9 +18,11 @@ async function request(method, path, body) {
   const response = await fetch(path, options);
   const data = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) {
-    const code = data?.error?.code ?? (response.status === 404 ? "not_found"
+    // Errors come as {error: {code, message}} (AI) or {detail: {code, ...}} (rule checks).
+    const detail = data?.detail && typeof data.detail === "object" && !Array.isArray(data.detail) ? data.detail : {};
+    const code = data?.error?.code ?? detail.code ?? (response.status === 404 ? "not_found"
       : response.status === 422 ? "validation" : "generic");
-    throw new ApiError(response.status, code, data?.error?.message ?? response.statusText);
+    throw new ApiError(response.status, code, data?.error?.message ?? detail.message ?? response.statusText, detail);
   }
   return data;
 }

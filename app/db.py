@@ -127,6 +127,10 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE criteria ADD COLUMN component_id TEXT;
     """,
+    # 8: whether a story is about a view (and so needs a mockup to be ready)
+    """
+    ALTER TABLE stories ADD COLUMN needs_view INTEGER NOT NULL DEFAULT 1;
+    """,
 ]
 
 

@@ -26,6 +26,8 @@ Size = Literal["S", "M", "L"]
 Origin = Literal["ai", "manual"]
 
 UNDO_DEPTH = 20
+MIN_CRITERIA = 3
+MissingCode = Literal["connextra", "criteria_count", "criteria_testable", "mockup", "open_questions"]
 
 
 class _Input(BaseModel):
@@ -42,6 +44,7 @@ class StoryParts(_Input):
 class StoryIn(StoryParts):
     size: Size | None = None
     status: Status = "idea"
+    needs_view: bool = True
     criteria: list[str] = Field(default_factory=list, max_length=30)
     open_questions: list[str] = Field(default_factory=list, max_length=20)
     notes: str = Field(default="", max_length=2000)
@@ -55,6 +58,7 @@ class StoryPatch(_Input):
     size: Size | None = None
     clear_size: bool = False
     status: Status | None = None
+    needs_view: bool | None = None
     criteria: list[str] | None = Field(default=None, max_length=30)
     open_questions: list[str] | None = Field(default=None, max_length=20)
     notes: str | None = Field(default=None, max_length=2000)
@@ -72,6 +76,12 @@ class Criterion(BaseModel):
     issues: list[testability.Issue] = []
 
 
+class Missing(BaseModel):
+    """One unmet Definition of Ready condition."""
+    code: MissingCode
+    count: int | None = None
+
+
 class Story(StoryParts):
     model_config = ConfigDict(extra="ignore")
     id: int
@@ -84,6 +94,8 @@ class Story(StoryParts):
     origin: Origin
     criteria: list[Criterion]
     mockup_ids: list[int]
+    needs_view: bool
+    readiness: list[Missing] = []
     open_questions: list[str]
     notes: str
     created_at: str
@@ -130,10 +142,68 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
     for row in rows:
         data = dict(row)
         data["open_questions"] = json.loads(data["open_questions"])
+        data["needs_view"] = bool(data["needs_view"])
         parts = StoryParts(**{k: data[k] for k in StoryParts.model_fields})
-        result.append(Story(**data, key=f"US-{data['number']}", title=title(parts),
-                            criteria=criteria.get(row["id"], []), mockup_ids=links.get(row["id"], [])))
+        story = Story(**data, key=f"US-{data['number']}", title=title(parts),
+                      criteria=criteria.get(row["id"], []), mockup_ids=links.get(row["id"], []))
+        story.readiness = readiness(story)
+        result.append(story)
     return result
+
+
+# --- Definition of Ready ---------------------------------------------------
+
+ACTION_OPENERS = ("soovin ", "tahan ", "i want ", "want to ")
+BENEFIT_OPENERS = ("et ", "selleks et ", "so that ", "in order to ")
+
+
+def connextra_ok(parts: StoryParts) -> bool:
+    """The parts form "<role> soovin <action>, et <benefit>." without doubled or missing pieces
+    (the usual slips when a whole sentence is typed into one field)."""
+    action, benefit = parts.action.lower(), parts.benefit.lower()
+    return (len(parts.role_phrase) >= 2 and len(action) >= 3 and len(benefit) >= 3
+            and "soovin" not in parts.role_phrase.lower()
+            and not action.startswith(ACTION_OPENERS) and not benefit.startswith(BENEFIT_OPENERS)
+            and ", et " not in action and "so that" not in action)
+
+
+def readiness(story: Story) -> list[Missing]:
+    """What keeps the story from "Ready for development"; empty when it is ready."""
+    missing: list[Missing] = []
+    if not connextra_ok(story):
+        missing.append(Missing(code="connextra"))
+    if len(story.criteria) < MIN_CRITERIA:
+        missing.append(Missing(code="criteria_count", count=len(story.criteria)))
+    untestable = sum(1 for c in story.criteria if c.issues)
+    if untestable:
+        missing.append(Missing(code="criteria_testable", count=untestable))
+    if story.needs_view and not story.mockup_ids:
+        missing.append(Missing(code="mockup"))
+    if story.open_questions:
+        missing.append(Missing(code="open_questions", count=len(story.open_questions)))
+    return missing
+
+
+def check_status(conn: sqlite3.Connection, project_id: int, story_id: int,
+                 requested: Status | None) -> None:
+    """Enforce the Definition of Ready after a change, inside its transaction.
+
+    Asking for "ready" when something is missing fails (and rolls the change back)
+    with the list of what is missing. "Needs clarification" needs an open question.
+    A story that was ready and no longer is drops back: to "needs clarification"
+    when it has open questions, otherwise to "reviewed".
+    """
+    story = get_story(conn, project_id, story_id)
+    if requested == "ready" and story.readiness:
+        raise HTTPException(422, {"code": "not_ready", "message": "The story is not ready for development",
+                                  "missing": [m.model_dump() for m in story.readiness]})
+    if requested == "needs_clarification" and not story.open_questions:
+        raise HTTPException(422, {"code": "needs_question",
+                                  "message": "Add the open question that needs clarifying"})
+    if requested is None and story.status == "ready" and story.readiness:
+        fallback = "needs_clarification" if story.open_questions else "reviewed"
+        conn.execute("UPDATE stories SET status = ? WHERE id = ?", (fallback, story_id))
+
 
 
 def get_story(conn: sqlite3.Connection, project_id: int, story_id: int) -> Story:
@@ -147,7 +217,8 @@ def snapshot(conn: sqlite3.Connection, project_id: int) -> list[dict]:
     """The backlog as the AI sees it: current state, including manual edits."""
     return [{"key": s.key, "role_name": s.role_name, "title": s.title, "status": s.status,
              "size": s.size, "criteria": [c.text for c in s.criteria],
-             "has_mockup": bool(s.mockup_ids),
+             "has_mockup": bool(s.mockup_ids), "needs_view": s.needs_view,
+             "missing_for_ready": [m.code for m in s.readiness],
              "open_questions": s.open_questions}
             for s in stories(conn, project_id)]
 
@@ -315,11 +386,12 @@ def add_stories(conn: sqlite3.Connection, project_id: int, new: list[StoryParts]
         full = parts if isinstance(parts, StoryIn) else StoryIn(**parts.model_dump())
         cur = conn.execute(
             "INSERT INTO stories (project_id, number, role_name, role_phrase, action, benefit, "
-            "status, position, size, origin, open_questions, notes, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "status, position, size, origin, open_questions, notes, created_at, updated_at, needs_view) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (project_id, _next_number(conn, project_id), full.role_name, full.role_phrase,
              full.action, full.benefit, full.status, position, full.size, origin,
-             json.dumps(_clean(full.open_questions), ensure_ascii=False), full.notes, stamp, stamp))
+             json.dumps(_clean(full.open_questions), ensure_ascii=False), full.notes, stamp, stamp,
+             int(full.needs_view)))
         _set_criteria(conn, cur.lastrowid, _clean(full.criteria), origin)
         ids.append(cur.lastrowid)
     db.touch_project(conn, project_id)
@@ -330,8 +402,9 @@ def create_story(conn: sqlite3.Connection, project_id: int, data: StoryIn) -> St
     with conn:
         before = _dump(conn, project_id)
         story = add_stories(conn, project_id, [data], origin="manual")[0]
+        check_status(conn, project_id, story.id, data.status if data.status != "idea" else None)
         record_undo(conn, project_id, "story_added", before=before, key=story.key)
-    return story
+    return get_story(conn, project_id, story.id)
 
 
 def update_story(conn: sqlite3.Connection, project_id: int, story_id: int,
@@ -340,6 +413,8 @@ def update_story(conn: sqlite3.Connection, project_id: int, story_id: int,
     fields = patch.model_dump(exclude_none=True, exclude={"criteria", "open_questions", "clear_size"})
     if patch.clear_size:
         fields["size"] = None
+    if "needs_view" in fields:
+        fields["needs_view"] = int(fields["needs_view"])
     if patch.open_questions is not None:
         fields["open_questions"] = json.dumps(_clean(patch.open_questions), ensure_ascii=False)
     with conn:
@@ -351,6 +426,7 @@ def update_story(conn: sqlite3.Connection, project_id: int, story_id: int,
         if patch.criteria is not None:
             _set_criteria(conn, story_id, _clean(patch.criteria), "manual")
             conn.execute("UPDATE stories SET updated_at = ? WHERE id = ?", (db.now(), story_id))
+        check_status(conn, project_id, story_id, patch.status)
         db.touch_project(conn, project_id)
     return get_story(conn, project_id, story_id)
 
