@@ -40,6 +40,27 @@ määratud väärtus on tähtsam kui `.env` failis olev.
 | `ENVIRONMENT` | `development` | `development`, `test` või `production` |
 | `DATABASE_PATH` | `data/mockup-maker.db` | SQLite faili asukoht |
 | `PORT` | `8010` | port, mida `./start.sh` kasutab |
+| `AI_PROVIDER` | `mock` | `codex` (ChatGPT tellimus Codex CLI kaudu), `mock` või `off` |
+| `AI_MODEL` | `gpt-6-astra` | Codexi mudel |
+| `AI_REASONING` | `low` | `low`, `medium` või `high` |
+| `AI_TIMEOUT` | `180` | sekundid enne Codexi protsessi katkestamist |
+| `CODEX_BIN` | PATH-ist | Codex CLI absoluutne tee |
+| `CODEX_HOME` | `~/.codex` | Codexi sisselogimise kaust |
+
+## AI ühendamine (ChatGPT tellimus)
+
+AI päringud käivad ainult serveri kaudu: server käivitab kohaliku
+[Codex CLI](https://github.com/openai/codex) (`codex exec`), mis on sisse logitud
+ChatGPT tellimusega. API võtit rakendus ei vaja ega hoia; sisselogimise andmed jäävad
+Codexi kausta (`CODEX_HOME`).
+
+```bash
+codex login --device-auth   # üks kord, kinnita kood brauseris
+```
+
+Seejärel pane `.env` faili `AI_PROVIDER=codex` ja taaskäivita server. Iga AI vastus
+kontrollitakse serveris skeemi järgi; vigase vastuse korral proovitakse üks kord uuesti
+ja seejärel näidatakse arusaadavat veateadet.
 
 ## Testid
 

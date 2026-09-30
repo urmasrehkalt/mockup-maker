@@ -30,3 +30,46 @@ def database_path() -> Path:
     value = os.environ.get("DATABASE_PATH", "").strip()
     path = Path(value) if value else ROOT_DIR / "data" / "mockup-maker.db"
     return path if path.is_absolute() else ROOT_DIR / path
+
+
+AI_PROVIDERS = ("codex", "mock", "off")
+DEFAULT_AI_MODEL = "gpt-6-astra"
+DEFAULT_AI_TIMEOUT = 180
+
+
+def ai_provider() -> str:
+    """`codex`, `mock` or `off`. Defaults to `mock`, so a fresh checkout and the
+    test suite never reach for the network or a Codex login."""
+    value = os.environ.get("AI_PROVIDER", "mock").strip().lower()
+    if value not in AI_PROVIDERS:
+        raise ValueError(f"AI_PROVIDER must be one of {AI_PROVIDERS}, got {value!r}")
+    return value
+
+
+def ai_model() -> str:
+    return os.environ.get("AI_MODEL", "").strip() or DEFAULT_AI_MODEL
+
+
+def ai_reasoning() -> str:
+    """Codex `model_reasoning_effort`. `low` keeps a guided conversation responsive."""
+    value = os.environ.get("AI_REASONING", "low").strip().lower()
+    return value if value in ("low", "medium", "high") else "low"
+
+
+def ai_timeout() -> int:
+    raw = os.environ.get("AI_TIMEOUT", "").strip()
+    return int(raw) if raw.isdigit() and int(raw) > 0 else DEFAULT_AI_TIMEOUT
+
+
+def codex_binary() -> str | None:
+    import shutil
+
+    named = os.environ.get("CODEX_BIN", "").strip()
+    if named:
+        return named if Path(named).exists() else None
+    return shutil.which("codex")
+
+
+def codex_home() -> str | None:
+    """Codex reads its ChatGPT login from here; `--ignore-user-config` still honours it."""
+    return os.environ.get("CODEX_HOME", "").strip() or None
