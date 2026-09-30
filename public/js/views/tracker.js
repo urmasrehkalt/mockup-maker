@@ -3,6 +3,7 @@
 import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
+import { frameOn } from "../mockup/frame.js";
 import { errorText, notice } from "../ui.js";
 
 let status = null;
@@ -36,7 +37,7 @@ export function openTrackerDialog(state, reload) {
     send.disabled = true;
     mount(results, h("p", { class: "muted" }, t("tracker.sending")));
     try {
-      const report = await api.pushToTracker(state.project.id, ids);
+      const report = await api.pushToTracker(state.project.id, ids, frameOn());
       mount(results, h("ul", { class: "push-results" }, report.results.map((r) => h("li", { class: r.outcome },
         h("strong", {}, r.key), " ", t(`tracker.${r.outcome}`, { id: r.tracker_id }),
         r.mockup !== "none" ? h("span", { class: "hint" }, ` · ${t(`tracker.mockup_${r.mockup}`)}`) : null,
@@ -51,7 +52,7 @@ export function openTrackerDialog(state, reload) {
 
   mount(dialog,
     h("h2", {}, t("tracker.title")),
-    h("p", { class: "hint" }, t("tracker.explain")),
+    h("p", { class: "hint" }, t("tracker.explain"), " ", t(frameOn() ? "tracker.framed" : "tracker.unframed")),
     h("ul", { class: "push-list" }, rows),
     results,
     h("div", { class: "dialog-actions" }, h("button", { type: "button", onclick: close }, t("mockup.close")), send));

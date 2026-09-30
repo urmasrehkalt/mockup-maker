@@ -20,11 +20,11 @@ Kõik ülesande põhifunktsioonid on olemas ja kasutatavad nii ChatGPT tellimuse
 | Groomimine: jagamine, ühendamine, AI ülevaatus leidudega „Rakenda“, „Muuda“, „Ignoreeri“ | töötab | #14, #15 |
 | Turvalisus: AI ainult serveri kaudu, võtit pole repositooriumis, mockup ei käivita koodi | töötab | #2, #8, #18 |
 
-Ülesande lisavõimalustest on tehtud backlog'i eksport Markdowni ja CSV-sse (#22), kriteeriumi ja mockup'i elemendi seos (kriteeriumile osutades tõstetakse element esile, #9), rollide kaupa story map (#22) ning mockup'i PNG eksport ja saatmine Agile Trackerisse (#16). Lisaks on käsitsi mockup'i redaktor (#17), vabakäe märkmed mockup'il (#18), projektimallid (#19) ja eesti- ning ingliskeelne liides (#20).
+Ülesande lisavõimalustest on tehtud backlog'i eksport Markdowni ja CSV-sse (#22), kriteeriumi ja mockup'i elemendi seos (kriteeriumile osutades tõstetakse element esile, #9), rollide kaupa story map (#22) ning mockup'i PNG eksport ja saatmine Agile Trackerisse (#16). Lisaks on käsitsi mockup'i redaktor (#17), vabakäe märkmed mockup'il (#18), projektimallid (#19), eesti- ning ingliskeelne liides (#20) ja mockup'i brauseri- või telefoniraam, mida saab sisse ja välja lülitada (#29).
 
 ### Kuidas seda kontrolliti
 
-- **Automaattestid:** 250 testi (`.venv/bin/pytest`), mis katavad iga loo kriteeriumid. AI ja tracker on testides asendatud, nii et testid ei vaja võrku ega sisselogimist.
+- **Automaattestid:** 261 testi (`.venv/bin/pytest`), mis katavad iga loo kriteeriumid. AI ja tracker on testides asendatud, nii et testid ei vaja võrku ega sisselogimist.
 - **Brauser:** iga loo lõpus kontrolliti töövoogu Playwrightiga päris brauseris (laua- ja telefonilaius, hele ja tume teema).
 - **Päris AI:** iga AI-ga seotud loo lõpus käis sama töövoog läbi reaalse Codexiga ning selle käigus leitud probleemid parandati enne loo lõpetamist (vt allpool).
 - **Vastuvõtukatse:** ülesande vastuvõtukatse sammud käidi läbi päris Codexiga eraldi andmebaasiga (tulemus allpool).

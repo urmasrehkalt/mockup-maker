@@ -278,7 +278,7 @@ function proposalCard(message, live, send, state) {
     if (!id) return;
     preview.querySelectorAll(`[data-component-id="${CSS.escape(id)}"]`).forEach((el) => el.classList.toggle("wf-highlight", on));
   };
-  const open = () => openMockupViewer({ title: p.mockup.title, tree: p.mockup });
+  const open = () => openMockupViewer({ title: p.mockup.title, tree: p.mockup }, site(state));
   const mockupColumn = h("div", { class: "proposal-side" },
     h("button", { type: "button", class: "proposal-preview", onclick: open, "aria-label": t("mockup.open", { title: p.mockup.title }) }, preview),
     h("button", { type: "button", class: "small", onclick: open }, t("chat.open_mockup")));
@@ -404,7 +404,7 @@ function newViewCard(message, live, send, state) {
         .map((row) => (row.index === null ? { index: null, text: row.text }
           : row.state === "edited" ? { index: row.index, text: row.text } : { index: row.index })) });
   };
-  const open = () => openMockupViewer({ title: v.mockup.title, tree: v.mockup });
+  const open = () => openMockupViewer({ title: v.mockup.title, tree: v.mockup }, site(state));
 
   return h("div", { class: "card-block proposal new-view-card" },
     heading,
@@ -446,7 +446,12 @@ function changedIds(before, after) {
   return [...flat(after)].filter(([id, value]) => old.get(id) !== value).map(([id]) => id);
 }
 
-function mockupPair(before, after) {
+// What the viewer needs for the browser frame's address.
+function site(state) {
+  return { projectName: state.project.name, language: state.project.language };
+}
+
+function mockupPair(before, after, state) {
   const afterView = h("div", { class: "proposal-mockup" }, renderTree(after));
   changedIds(before, after).forEach((id) =>
     afterView.querySelectorAll(`[data-component-id="${CSS.escape(id)}"]`).forEach((el) => el.classList.add("wf-changed")));
@@ -456,7 +461,7 @@ function mockupPair(before, after) {
         : h("p", { class: "hint" }, t("chat.no_mockup"))),
     h("figure", {}, h("figcaption", {}, t("chat.after")),
       h("button", { type: "button", class: "proposal-preview", "aria-label": t("mockup.open", { title: after.title }),
-        onclick: () => openMockupViewer({ title: after.title, tree: after }) }, afterView)));
+        onclick: () => openMockupViewer({ title: after.title, tree: after }, site(state)) }, afterView)));
 }
 
 function criteriaDiff(before, after) {
@@ -492,7 +497,7 @@ function changeCard(message, live, send, state) {
       c.wording ? h("div", { class: "change-section" }, h("h4", {}, t("chat.change_wording")),
         h("p", { class: "removed" }, c.before.title), h("p", { class: "added" }, c.after_title)) : null,
       changesStory ? h("div", { class: "change-section" }, h("h4", {}, t("editor.criteria")), criteriaDiff(c.before.criteria, c.criteria)) : null,
-      c.mockup ? h("div", { class: "change-section" }, h("h4", {}, t("mockup.section")), mockupPair(c.before.mockup, c.mockup)) : null,
+      c.mockup ? h("div", { class: "change-section" }, h("h4", {}, t("mockup.section")), mockupPair(c.before.mockup, c.mockup, state)) : null,
       c.other_stories.length ? h("div", { class: "change-section other-stories" }, h("h4", {}, t("chat.other_stories")),
         h("ul", {}, c.other_stories.map((o) => {
           const story = state.stories.find((s) => s.key === o.story_key);

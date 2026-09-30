@@ -488,6 +488,35 @@ dialog.viewer { width: min(1100px, calc(100vw - 32px)); }
 .segmented [aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .wf-stage { padding: 16px; border-radius: 8px; background: var(--surface-2); overflow: auto; }
 
+/* Device frames around a mockup: drawn like the mockup itself, grey on white. */
+.device { --device-line: #9aa0a6; --device-soft: #eceef0; --device-ink: #2b2f33; }
+.device-browser { border: 1px solid var(--device-line); border-radius: 10px; overflow: hidden; background: #fff; }
+.browser-bar { display: flex; align-items: center; gap: 16px; padding: 8px 14px; background: var(--device-soft);
+  border-bottom: 1px solid var(--device-line); }
+.browser-dots { display: flex; gap: 6px; flex: none; }
+.browser-dots span { width: 11px; height: 11px; border-radius: 50%; background: var(--device-line); }
+.browser-address { flex: 0 1 560px; min-width: 0; padding: 3px 14px; border: 1px solid var(--device-line); border-radius: 999px;
+  background: #fff; color: #6b7178; font: 13px system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device-screen .wf { border: 0; border-radius: 0; }
+/* A browser window is at least as tall as a 16:10 laptop screen; longer pages grow. */
+.device-browser .device-screen .wf { aspect-ratio: 16 / 10; align-content: start; }
+/* The phone is drawn at real size (a 375 × 812 screen) and shrunk to fit with zoom (frame.js). */
+.device-phone { width: 375px; margin: 0 auto; padding: 12px; border-radius: 54px; background: var(--device-ink);
+  box-sizing: content-box; box-shadow: 0 0 0 1px var(--device-line); }
+.device-phone .phone-status { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 30px;
+  border-radius: 42px 42px 0 0; background: #fff; color: var(--device-ink); font: 600 13px system-ui, sans-serif; }
+.phone-notch { width: 120px; height: 30px; margin-top: -14px; border-radius: 0 0 14px 14px; background: var(--device-ink); }
+.phone-icons { display: flex; align-items: center; gap: 6px; }
+.phone-signal { width: 16px; height: 10px; background: linear-gradient(to right, var(--device-ink) 3px, transparent 3px 4px,
+  var(--device-ink) 4px 7px, transparent 7px 8px, var(--device-ink) 8px 11px, transparent 11px 12px, var(--device-ink) 12px);
+  clip-path: polygon(0 100%, 100% 0, 100% 100%); }
+.phone-battery { position: relative; width: 20px; height: 10px; border: 1.5px solid var(--device-ink); border-radius: 3px; }
+.phone-battery::after { content: ""; position: absolute; inset: 1.5px 5px 1.5px 1.5px; border-radius: 1px; background: var(--device-ink); }
+.device-phone .device-screen { height: 734px; overflow-y: auto; background: #fff; }
+.device-phone .wf-mobile { width: auto; margin: 0; }
+.device-phone .phone-home { display: flex; justify-content: center; height: 34px; border-radius: 0 0 42px 42px; background: #fff; }
+.device-phone .phone-home::before { content: ""; width: 134px; height: 5px; margin-top: 18px; border-radius: 3px; background: var(--device-ink); }
+
 /* --- criteria and mockup proposal ------------------------------------- */
 
 .message.assistant:has(.proposal) { max-width: 100%; }

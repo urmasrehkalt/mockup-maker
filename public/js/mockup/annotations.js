@@ -35,9 +35,9 @@ function wrapText(text, perLine = 28) {
 /**
  * @param tree         the mockup's component tree
  * @param annotations  the marks to show (copied; the original is not changed)
- * @param options      { editable, onSave(marks), onCancel }
+ * @param options      { editable, onSave(marks), onCancel, frame(board): a device frame around the board }
  */
-export function createArtboard(tree, annotations = [], { editable = false, onSave = null, onCancel = null } = {}) {
+export function createArtboard(tree, annotations = [], { editable = false, onSave = null, onCancel = null, frame = null } = {}) {
   let marks = structuredClone(annotations);
   let tool = "rect";
   let color = "red";
@@ -131,7 +131,8 @@ export function createArtboard(tree, annotations = [], { editable = false, onSav
   board.resizeObserver.observe(board);
   requestAnimationFrame(fit);
 
-  if (!editable) return { element: board, redraw: fit };
+  const framed = frame ? frame(board) : board;
+  if (!editable) return { element: framed, redraw: fit };
 
   // --- drawing ---------------------------------------------------------------
   const noteText = h("input", { type: "text", maxlength: 200, placeholder: t("marks.note_hint"), "aria-label": t("marks.note_hint"), hidden: true });
@@ -204,5 +205,5 @@ export function createArtboard(tree, annotations = [], { editable = false, onSav
     h("span", { class: "spacer" }),
     h("button", { type: "button", class: "small", onclick: () => onCancel?.() }, t("editor.cancel")),
     h("button", { type: "button", class: "small primary", onclick: () => onSave?.(marks) }, t("marks.save")));
-  return { element: h("div", { class: "annotating" }, toolbar, board), redraw: fit };
+  return { element: h("div", { class: "annotating" }, toolbar, framed), redraw: fit };
 }

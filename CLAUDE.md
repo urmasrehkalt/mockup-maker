@@ -29,7 +29,10 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   labels in both languages (tests/test_resume_actions.py)
 - `app/mockups.py` + `app/mockup_templates.py`: mockups are a component tree (one node shape,
   per-type rules in `check_tree`), stored as versions, linked to stories. Never HTML: the browser
-  renders trees in `public/js/mockup/render.js` via `h()` with `data-component-id` on every element
+  renders trees in `public/js/mockup/render.js` via `h()` with `data-component-id` on every element.
+  Device frames (`public/js/mockup/frame.js`, browser around desktop, phone around mobile) are
+  presentation only, never part of the tree; the PNG gets a browser frame with `frame=true`, its
+  address from `mockup_png.site_address()` (frame.js `siteAddress()` must match it)
 - `app/review.py`: AI backlog review, its own task (not a turn). Findings carry one proposal
   each; `uncovered()` fills rule-known problems the model missed; applying reuses backlog
   split/merge/update so it is checked and undoable

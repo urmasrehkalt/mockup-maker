@@ -45,7 +45,8 @@ async function draw(section, state, story, reload) {
     draw(section, next, next.stories.find((s) => s.id === story.id) ?? story, reload);
   };
   const sharedWith = (m) => state.stories.filter((s) => s.mockup_ids.includes(m.id)).map((s) => s.key);
-  const viewerOptions = { projectId: state.project.id, onChange: refresh, language };
+  const projectName = state.project.name;
+  const viewerOptions = { projectId: state.project.id, onChange: refresh, language, projectName };
   const templateSelect = h("select", { "aria-label": t("mockup.template") },
     templates.map((tpl) => h("option", { value: tpl.key }, tpl.name)));
   const existingSelect = h("select", { "aria-label": t("mockup.existing") },
@@ -62,7 +63,7 @@ async function draw(section, state, story, reload) {
           h("div", { class: "mockup-link-actions" },
             h("button", { type: "button", class: "small", onclick: () => openMockupViewer(m, { ...viewerOptions, sharedWith: sharedWith(m) }) }, t("mockup.view")),
             h("button", { type: "button", class: "small", onclick: () =>
-              openMockupEditor(m, { projectId: state.project.id, sharedWith: sharedWith(m), onSaved: refresh, language }) },
+              openMockupEditor(m, { projectId: state.project.id, sharedWith: sharedWith(m), onSaved: refresh, language, projectName }) },
             `✎ ${t("mockup.edit")}`),
             h("button", { type: "button", class: "small", onclick: () =>
               act(() => api.unlinkMockup(state.project.id, story.id, m.id)) }, t("mockup.unlink")))))))

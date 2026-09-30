@@ -13,6 +13,8 @@ from __future__ import annotations
 import io
 import math
 import os
+import re
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 
@@ -360,19 +362,64 @@ def draw_marks(draw: ImageDraw.ImageDraw, marks: list[Annotation], boxes) -> Non
                 draw.text((x + 8, y + 5 + i * 18), line, font=fnt, fill=INK)
 
 
-def render_png(tree: Tree, annotations: list[Annotation] | None = None) -> bytes:
-    """The whole view as PNG bytes, as tall as its content (and its annotations)."""
+def site_address(project_name: str, title: str, language: str = "et") -> str:
+    """A made-up web address for the browser frame, e.g. "e-pood.ee/e-poe-avaleht".
+
+    public/js/mockup/frame.js builds the same address for the screen.
+    """
+    def slug(text: str) -> str:
+        plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+        return re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
+    host = f"{slug(project_name) or 'example'}.{'com' if language == 'en' else 'ee'}"
+    path = slug(title)
+    return f"{host}/{path}" if path else host
+
+
+FRAME_BAR = 44
+WINDOW_MIN_HEIGHT = WIDTH * 10 // 16  # a browser window is at least a 16:10 screen, as on the page
+
+
+def frame(view: Image.Image, address: str) -> Image.Image:
+    """The view inside a minimal browser window: three dots and an address bar."""
+    w, h = view.size
+    out = Image.new("RGB", (w + 2, h + FRAME_BAR + 1), WHITE)
+    d = ImageDraw.Draw(out)
+    d.rectangle((0, 0, w + 1, FRAME_BAR - 1), fill=SOFT)
+    d.rectangle((0, 0, w + 1, h + FRAME_BAR), outline=LINE)
+    d.line((0, FRAME_BAR - 1, w + 1, FRAME_BAR - 1), fill=LINE)
+    for i in range(3):
+        cx = 20 + i * 18
+        d.ellipse((cx - 6, FRAME_BAR / 2 - 6, cx + 6, FRAME_BAR / 2 + 6), fill=LINE)
+    left, right = 90, min(w - 90, 90 + 560)
+    d.rounded_rectangle((left, 9, right, FRAME_BAR - 10), radius=12, fill=WHITE, outline=LINE)
+    fnt, text = font(13), address
+    while text and fnt.getlength(text) > right - left - 28:
+        text = text[:-2] + "…"
+    d.text((left + 14, FRAME_BAR / 2 - 8), text, font=fnt, fill=MUTED)
+    out.paste(view, (1, FRAME_BAR))
+    return out
+
+
+def render_png(tree: Tree, annotations: list[Annotation] | None = None, address: str | None = None) -> bytes:
+    """The whole view as PNG bytes, as tall as its content (and its annotations).
+
+    With an address, the view is drawn inside a browser frame showing it.
+    """
     width = WIDTH - 2 * PAD
     measure = Painter(None)
     height = PAD * 2 + measure.stack(tree.components, PAD, PAD, width, gap=GAP)
     for mark in annotations or []:  # a mark below the content makes the image taller
         lowest = max(y for _, y in absolute(mark, measure.boxes))
         height = max(height, int(lowest) + (120 if mark.tool == "note" else 20))
+    if address is not None:
+        height = max(height, WINDOW_MIN_HEIGHT)
     height = min(MAX_HEIGHT, height)
     image = Image.new("RGB", (WIDTH, height), WHITE)
     painter = Painter(ImageDraw.Draw(image))
     painter.stack(tree.components, PAD, PAD, width, gap=GAP)
     draw_marks(ImageDraw.Draw(image), annotations or [], painter.boxes)
+    if address is not None:
+        image = frame(image, address)
     out = io.BytesIO()
     image.save(out, "PNG", optimize=True)
     return out.getvalue()

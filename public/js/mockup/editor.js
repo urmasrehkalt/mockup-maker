@@ -7,6 +7,7 @@ import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
+import { browserFrame, frameOn, frameToggle, siteAddress } from "./frame.js";
 import { renderTree } from "./render.js";
 import * as ops from "./tree-ops.js";
 
@@ -84,20 +85,30 @@ function blank(tree, type, given = new Set()) {
 
 /**
  * @param mockup   { id, title, version, tree }
- * @param options  { projectId, sharedWith: [story keys], onSaved, language: the project's content language }
+ * @param options  { projectId, sharedWith: [story keys], onSaved, language: the project's content language,
+ *                   projectName: for the browser frame's address }
  */
-export function openMockupEditor(mockup, { projectId, sharedWith = [], onSaved, language = "et" }) {
+export function openMockupEditor(mockup, { projectId, sharedWith = [], onSaved, language = "et", projectName = "" }) {
   samples = language === "en" ? DEFAULTS_EN : DEFAULTS;
   const tree = structuredClone(mockup.tree);
   let selected = null;
   let dirty = false;
 
   const canvas = h("div", { class: "editor-canvas" });
+  const stage = h("div", { class: "wf-stage" });
+  const address = () => siteAddress(projectName, tree.title, language);
+  // The canvas itself stays the drop target; the frame only surrounds it.
+  const frame = (on) => mount(stage, on ? browserFrame(canvas, address()) : canvas);
   const inspector = h("aside", { class: "inspector" });
   const status = h("div", { class: "form-status" });
   const titleInput = h("input", { type: "text", maxlength: 120, "aria-label": t("mockup.view_title") });
   titleInput.value = tree.title;
-  titleInput.addEventListener("input", () => { tree.title = titleInput.value; dirty = true; });
+  titleInput.addEventListener("input", () => {
+    tree.title = titleInput.value;
+    dirty = true;
+    const shown = stage.querySelector(".browser-address");
+    if (shown) shown.textContent = address();
+  });
 
   const changed = () => { dirty = true; draw(); };
 
@@ -233,12 +244,14 @@ export function openMockupEditor(mockup, { projectId, sharedWith = [], onSaved, 
   mount(dialog,
     h("div", { class: "viewer-head" },
       h("h2", {}, t("editor.mockup_title")), titleInput,
+      frameToggle(frame),
       h("button", { type: "button", class: "small", onclick: close }, t("editor.cancel")),
       h("button", { type: "button", class: "small primary", onclick: save }, t("editor.save_version"))),
     sharedWith.length > 1 ? notice(t("editor.shared", { keys: sharedWith.join(", ") })) : null,
     status,
-    h("div", { class: "editor-body" }, palette, h("div", { class: "wf-stage" }, canvas), inspector));
+    h("div", { class: "editor-body" }, palette, stage, inspector));
   document.body.append(dialog);
+  frame(frameOn());
   draw();
   dialog.showModal();
 }

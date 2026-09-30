@@ -7,14 +7,17 @@ import { formatDateTime, t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 import { createArtboard } from "./annotations.js";
 import { openMockupEditor } from "./editor.js";
+import { browserFrame, frameOn, frameToggle, phoneFrame, siteAddress } from "./frame.js";
 import { renderTree } from "./render.js";
 
 /**
  * @param mockup   { id?, title, version, tree }
- * @param options  { projectId, onChange, sharedWith, language } to show versions and allow editing;
- *                 onChange() runs after a restore or a saved edit
+ * @param options  { projectId, onChange, sharedWith } to show versions and allow editing;
+ *                 onChange() runs after a restore or a saved edit. projectName and language
+ *                 (the project's content language) make the browser frame's address
  */
-export function openMockupViewer(mockup, { projectId = null, onChange = null, sharedWith = [], language = "et" } = {}) {
+export function openMockupViewer(mockup, { projectId = null, onChange = null, sharedWith = [], language = "et",
+  projectName = "" } = {}) {
   const stage = h("div", { class: "wf-stage" });
   const side = h("aside", { class: "versions" });
   const heading = h("h2", {});
@@ -22,6 +25,9 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
   let shown = { number: mockup.version, tree: mockup.tree, annotations: mockup.annotations ?? [] };
   let annotating = false;
   let latest = mockup.version;
+  // The device frame follows the viewer's choice; the PNG download follows it too.
+  let framed = frameOn();
+  const inBrowser = () => (framed ? (board) => browserFrame(board, siteAddress(projectName, shown.tree.title, language)) : null);
 
   const toggles = ["desktop", "mobile"].map((v) => h("button", {
     type: "button", class: "small", "aria-pressed": String(v === viewport),
@@ -34,13 +40,13 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
     onclick: () => { annotating = true; viewport = "desktop"; draw(); } }, `✎ ${t("marks.button")}`) : null;
 
   function draw() {
-    if (download) download.href = `/api/projects/${projectId}/mockups/${mockup.id}/png?version=${shown.number}`;
+    if (download) download.href = `/api/projects/${projectId}/mockups/${mockup.id}/png?version=${shown.number}${framed ? "&frame=true" : ""}`;
     if (markButton) markButton.disabled = annotating || shown.number !== latest;
     toggles.forEach((b, i) => b.setAttribute("aria-pressed", String(["desktop", "mobile"][i] === viewport)));
     mount(heading, shown.tree.title, shown.number ? h("span", { class: "muted" }, ` · v${shown.number}`) : null,
       shown.number !== latest ? h("span", { class: "old-version" }, t("mockup.older")) : null);
     if (annotating) {
-      mount(stage, createArtboard(shown.tree, shown.annotations, { editable: true,
+      mount(stage, createArtboard(shown.tree, shown.annotations, { editable: true, frame: inBrowser(),
         onCancel: () => { annotating = false; draw(); },
         onSave: async (marks) => {
           try {
@@ -56,10 +62,11 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
           }
         } }).element);
     } else if (viewport === "desktop") {
-      mount(stage, createArtboard(shown.tree, shown.annotations).element);
+      mount(stage, createArtboard(shown.tree, shown.annotations, { frame: inBrowser() }).element);
     } else {
+      const view = renderTree(shown.tree, { viewport });
       mount(stage, shown.annotations.length ? h("p", { class: "hint" }, t("marks.desktop_only")) : null,
-        renderTree(shown.tree, { viewport }));
+        framed ? phoneFrame(view) : view);
     }
   }
 
@@ -100,11 +107,12 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
   mount(dialog,
     h("div", { class: "viewer-head" }, heading,
       h("div", { class: "segmented" }, toggles),
+      frameToggle((on) => { framed = on; draw(); }),
       download,
       markButton,
       projectId && mockup.id ? h("button", { type: "button", class: "small", onclick: () => {
         close();
-        openMockupEditor({ ...mockup, tree: shown.tree }, { projectId, sharedWith, onSaved: onChange, language });
+        openMockupEditor({ ...mockup, tree: shown.tree }, { projectId, sharedWith, onSaved: onChange, language, projectName });
       } }, `✎ ${t("mockup.edit")}`) : null,
       h("button", { type: "button", class: "small", onclick: close }, t("mockup.close"))),
     h("div", { class: "viewer-body" }, stage, projectId && mockup.id ? side : null));

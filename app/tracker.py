@@ -24,7 +24,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import backlog, config, db, mockups, projects
-from .mockup_png import render_png
+from .mockup_png import render_png, site_address
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
@@ -81,6 +81,7 @@ def transport() -> Transport:
 class PushIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     story_ids: list[int] | None = Field(default=None, max_length=200)  # None: the whole backlog
+    frame: bool = False  # draw the mockups inside a browser frame
 
 
 class PushResult(BaseModel):
@@ -141,13 +142,19 @@ def story_payload(story: backlog.Story, project_id: int, language: str = "et") -
             "projectId": project_id, "acceptanceCriteria": [c.text for c in story.criteria]}
 
 
-def _push_story(conn: sqlite3.Connection, project_id: int, story: backlog.Story, tracker_project: int,
-                all_mockups: dict[int, mockups.Mockup], t: Transport) -> PushResult:
+def mockup_image(tree: mockups.Tree, annotations: list[mockups.Annotation], project: projects.Project,
+                 frame: bool = False) -> bytes:
+    """The PNG of a view, inside a browser frame with the project's made-up address when asked."""
+    address = site_address(project.name, tree.title, project.language) if frame else None
+    return render_png(tree, annotations, address)
+
+
+def _push_story(conn: sqlite3.Connection, project: projects.Project, story: backlog.Story, tracker_project: int,
+                all_mockups: dict[int, mockups.Mockup], t: Transport, frame: bool = False) -> PushResult:
     if not story.criteria:
         return PushResult(key=story.key, outcome="skipped",
                           message="The tracker needs at least one acceptance criterion")
-    language = conn.execute("SELECT language FROM projects WHERE id = ?", (project_id,)).fetchone()[0]
-    payload = story_payload(story, tracker_project, language)
+    payload = story_payload(story, tracker_project, project.language)
     link = conn.execute("SELECT * FROM tracker_links WHERE story_id = ?", (story.id,)).fetchone()
     outcome, tracker_id = "created", None
     if link:
@@ -165,7 +172,7 @@ def _push_story(conn: sqlite3.Connection, project_id: int, story: backlog.Story,
     digest = link["mockup_hash"] if link else None
     linked = [all_mockups[m] for m in story.mockup_ids if m in all_mockups]
     if linked:
-        image = render_png(linked[0].tree, linked[0].annotations)
+        image = mockup_image(linked[0].tree, linked[0].annotations, project, frame)
         new_digest = hashlib.sha256(image).hexdigest()
         if len(image) > MAX_IMAGE_BYTES:
             result.mockup, result.message = "failed", "The mockup image is larger than 5 MB"
@@ -186,7 +193,7 @@ def _push_story(conn: sqlite3.Connection, project_id: int, story: backlog.Story,
 
 
 def push(conn: sqlite3.Connection, project_id: int, story_ids: list[int] | None,
-         t: Transport | None = None) -> PushReport:
+         t: Transport | None = None, frame: bool = False) -> PushReport:
     project = projects.get(conn, project_id)
     t = t or transport()
     stories = backlog.stories(conn, project_id)
@@ -203,7 +210,7 @@ def push(conn: sqlite3.Connection, project_id: int, story_ids: list[int] | None,
     results = []
     for story in stories:
         try:
-            results.append(_push_story(conn, project_id, story, tracker_project, all_mockups, t))
+            results.append(_push_story(conn, project, story, tracker_project, all_mockups, t, frame))
         except TrackerError as exc:
             results.append(PushResult(key=story.key, outcome="failed", message=str(exc)))
     return PushReport(tracker_project_id=tracker_project, results=results)
@@ -221,11 +228,11 @@ def tracker_status() -> dict[str, Any]:
 
 @router.post("/api/projects/{project_id}/tracker/push", response_model=PushReport)
 def post_push(project_id: int, data: PushIn, conn: sqlite3.Connection = Depends(db.get_db)):
-    return push(conn, project_id, data.story_ids)
+    return push(conn, project_id, data.story_ids, frame=data.frame)
 
 
 @router.get("/api/projects/{project_id}/mockups/{mockup_id}/png")
-def mockup_png(project_id: int, mockup_id: int, version: int | None = None,
+def mockup_png(project_id: int, mockup_id: int, version: int | None = None, frame: bool = False,
                conn: sqlite3.Connection = Depends(db.get_db)):
     if version is None:
         mockup = mockups.get_mockup(conn, project_id, mockup_id)
@@ -235,6 +242,6 @@ def mockup_png(project_id: int, mockup_id: int, version: int | None = None,
         if found is None:
             raise HTTPException(404, "Version not found")
         tree, number, marks = found.tree, found.number, found.annotations
-    image = render_png(tree, marks)
+    image = mockup_image(tree, marks, projects.get(conn, project_id), frame)
     return Response(image, media_type="image/png", headers={
         "Content-Disposition": f'inline; filename="mockup-{mockup_id}-v{number}.png"'})

@@ -44,7 +44,7 @@ export const api = {
   mergeStories: (id, data) => request("POST", `/api/projects/${id}/stories/merge`, data),
   review: (id) => request("POST", `/api/projects/${id}/review`),
   trackerStatus: () => request("GET", "/api/tracker"),
-  pushToTracker: (id, storyIds) => request("POST", `/api/projects/${id}/tracker/push`, { story_ids: storyIds }),
+  pushToTracker: (id, storyIds, frame = false) => request("POST", `/api/projects/${id}/tracker/push`, { story_ids: storyIds, frame }),
   decideFinding: (id, messageId, index, data) => request("POST", `/api/projects/${id}/review/${messageId}/findings/${index}`, data),
   undo: (id) => request("POST", `/api/projects/${id}/undo`),
   templates: (lang = "et") => request("GET", `/api/mockup-templates?lang=${lang}`),
