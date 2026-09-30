@@ -5,6 +5,7 @@ import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, issueList, notice, readinessList } from "../ui.js";
 import { storyMockups } from "../mockup/story-mockups.js";
+import { openMergeDialog, openSplitDialog } from "./grooming.js";
 
 const STATUSES = ["idea", "needs_clarification", "reviewed", "ready"];
 const SIZES = ["", "S", "M", "L"];
@@ -81,6 +82,16 @@ export function openStoryEditor(state, story, reload) {
     }
   }
 
+  async function startHere() {
+    try {
+      await api.patchProject(project.id, { current_story_id: story.id });
+      close();
+      await reload();
+    } catch (error) {
+      mount(errors, notice(errorText(error), "error"));
+    }
+  }
+
   async function remove() {
     if (!confirm(t("editor.confirm_delete", { key: story.key }))) return;
     try {
@@ -114,6 +125,14 @@ export function openStoryEditor(state, story, reload) {
     label("st-notes", t("editor.notes")), notes,
     storyMockups(state, story, reload),
     errors,
+    isNew ? null : h("div", { class: "grooming-actions" },
+      h("span", { class: "hint" }, t("grooming.label")),
+      h("button", { type: "button", class: "small", disabled: project.current_story_id === story.id,
+        onclick: startHere }, `▶ ${t("grooming.start_here")}`),
+      h("button", { type: "button", class: "small", onclick: () => { close(); openSplitDialog(state, story, reload); } },
+        t("grooming.split")),
+      h("button", { type: "button", class: "small", disabled: stories.length < 2,
+        onclick: () => { close(); openMergeDialog(state, story, reload); } }, t("grooming.merge"))),
     h("div", { class: "dialog-actions" },
       isNew ? null : h("button", { type: "button", class: "danger", onclick: remove }, t("editor.delete")),
       h("button", { type: "button", onclick: close }, t("editor.cancel")),

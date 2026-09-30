@@ -13,6 +13,7 @@ management never touches the AI.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from typing import Any, Literal
 
@@ -66,6 +67,40 @@ class StoryPatch(_Input):
 
 class Order(_Input):
     ids: list[int]
+    mvp_count: int | None = Field(default=None, ge=0)  # stories above the MVP line
+    keep_mvp: bool = True  # False together with mvp_count=None removes the line
+
+
+class Wording(_Input):
+    role_name: str | None = Field(default=None, min_length=1, max_length=60)
+    role_phrase: str = Field(min_length=1, max_length=80)
+    action: str = Field(min_length=1, max_length=300)
+    benefit: str = Field(min_length=1, max_length=300)
+
+
+class SplitPart(Wording):
+    criterion_ids: list[int] = Field(default_factory=list, max_length=30)
+    new_criteria: list[str] = Field(default_factory=list, max_length=15)
+
+
+class SplitIn(_Input):
+    parts: list[SplitPart] = Field(min_length=2, max_length=5)
+    link_mockups: bool = True
+    dry_run: bool = False
+
+
+class MergeIn(_Input):
+    keep_id: int
+    remove_id: int
+    wording: Wording | None = None
+    criteria: list[str] | None = Field(default=None, max_length=30)  # the final list, if edited
+    dry_run: bool = False
+
+
+class MergeResult(BaseModel):
+    story: "Story"
+    removed_key: str
+    dropped_duplicates: list[str]
 
 
 class Criterion(BaseModel):
@@ -95,11 +130,15 @@ class Story(StoryParts):
     criteria: list[Criterion]
     mockup_ids: list[int]
     needs_view: bool
+    in_mvp: bool = False
     readiness: list[Missing] = []
     open_questions: list[str]
     notes: str
     created_at: str
     updated_at: str
+
+
+MergeResult.model_rebuild()
 
 
 class Undo(BaseModel):
@@ -126,6 +165,8 @@ def _clean(items: list[str], limit: int = 500) -> list[str]:
 def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
     rows = conn.execute("SELECT * FROM stories WHERE project_id = ? ORDER BY position, id",
                         (project_id,)).fetchall()
+    mvp = conn.execute("SELECT mvp_count FROM projects WHERE id = ?", (project_id,)).fetchone()
+    mvp_count = mvp["mvp_count"] if mvp else None
     criteria: dict[int, list[Criterion]] = {}
     for row in conn.execute(
             "SELECT c.* FROM criteria c JOIN stories s ON s.id = c.story_id "
@@ -139,8 +180,9 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
             "WHERE s.project_id = ? ORDER BY l.mockup_id", (project_id,)):
         links.setdefault(row["story_id"], []).append(row["mockup_id"])
     result = []
-    for row in rows:
+    for index, row in enumerate(rows):
         data = dict(row)
+        data["in_mvp"] = mvp_count is not None and index < mvp_count
         data["open_questions"] = json.loads(data["open_questions"])
         data["needs_view"] = bool(data["needs_view"])
         parts = StoryParts(**{k: data[k] for k in StoryParts.model_fields})
@@ -218,7 +260,7 @@ def snapshot(conn: sqlite3.Connection, project_id: int) -> list[dict]:
     return [{"key": s.key, "role_name": s.role_name, "title": s.title, "status": s.status,
              "size": s.size, "criteria": [c.text for c in s.criteria],
              "has_mockup": bool(s.mockup_ids), "needs_view": s.needs_view,
-             "missing_for_ready": [m.code for m in s.readiness],
+             "missing_for_ready": [m.code for m in s.readiness], "in_mvp": s.in_mvp,
              "open_questions": s.open_questions}
             for s in stories(conn, project_id)]
 
@@ -239,9 +281,10 @@ def _dump(conn: sqlite3.Connection, project_id: int) -> str:
         "ON m.id = v.mockup_id WHERE m.project_id = ? GROUP BY v.mockup_id", (project_id,))}
     newest_mockup = conn.execute("SELECT COALESCE(MAX(id), 0) FROM mockups WHERE project_id = ?",
                                  (project_id,)).fetchone()[0]
+    mvp_count = conn.execute("SELECT mvp_count FROM projects WHERE id = ?", (project_id,)).fetchone()[0]
     return json.dumps({"stories": story_rows, "criteria": criteria_rows, "links": link_rows,
-                       "mockup_versions": versions, "newest_mockup": newest_mockup},
-                      ensure_ascii=False)
+                       "mockup_versions": versions, "newest_mockup": newest_mockup,
+                       "mvp_count": mvp_count}, ensure_ascii=False)
 
 
 def record_undo(conn: sqlite3.Connection, project_id: int, action: str,
@@ -301,6 +344,8 @@ def undo(conn: sqlite3.Connection, project_id: int) -> Undo:
         conn.execute("DELETE FROM story_mockups WHERE story_id IN "
                      "(SELECT id FROM stories WHERE project_id = ?)", (project_id,))
         _restore_mockups(conn, project_id, before)
+        if "mvp_count" in before:
+            conn.execute("UPDATE projects SET mvp_count = ? WHERE id = ?", (before["mvp_count"], project_id))
         conn.executemany("INSERT OR IGNORE INTO story_mockups (story_id, mockup_id) "
                          "SELECT ?, id FROM mockups WHERE id = ?",
                          [(link["story_id"], link["mockup_id"]) for link in before.get("links", [])])
@@ -435,22 +480,152 @@ def delete_story(conn: sqlite3.Connection, project_id: int, story_id: int) -> No
     story = get_story(conn, project_id, story_id)
     with conn:
         record_undo(conn, project_id, "story_deleted", key=story.key)
-        conn.execute("DELETE FROM stories WHERE id = ?", (story_id,))
-        _compact(conn, project_id)
+        _remove(conn, project_id, story)
         db.touch_project(conn, project_id)
 
 
-def reorder(conn: sqlite3.Connection, project_id: int, ids: list[int]) -> None:
+def _remove(conn: sqlite3.Connection, project_id: int, story: Story) -> None:
+    """Delete a story; a story above the MVP line takes the line up with it."""
+    if story.in_mvp:
+        conn.execute("UPDATE projects SET mvp_count = mvp_count - 1 WHERE id = ?", (project_id,))
+    conn.execute("DELETE FROM stories WHERE id = ?", (story.id,))
+    _compact(conn, project_id)
+
+
+def reorder(conn: sqlite3.Connection, project_id: int, order: Order) -> None:
+    ids = order.ids
     current = [s.id for s in stories(conn, project_id)]
     if sorted(ids) != sorted(current) or len(set(ids)) != len(ids):
         raise HTTPException(422, "The order must list every story of the project exactly once")
-    if ids == current:
+    if order.mvp_count is not None and order.mvp_count > len(ids):
+        raise HTTPException(422, "The MVP line cannot be below the last story")
+    old_line = conn.execute("SELECT mvp_count FROM projects WHERE id = ?", (project_id,)).fetchone()[0]
+    new_line = order.mvp_count if (order.mvp_count is not None or not order.keep_mvp) else old_line
+    if ids == current and new_line == old_line:
         return
     with conn:
-        record_undo(conn, project_id, "stories_reordered")
+        record_undo(conn, project_id, "mvp_moved" if ids == current else "stories_reordered")
         conn.executemany("UPDATE stories SET position = ? WHERE id = ?",
                          [(position, story_id) for position, story_id in enumerate(ids)])
+        conn.execute("UPDATE projects SET mvp_count = ? WHERE id = ?", (new_line, project_id))
         db.touch_project(conn, project_id)
+
+
+# --- grooming: split and merge -------------------------------------------
+
+class _DryRun(Exception):
+    """Carries a preview out of a transaction, which then rolls back."""
+
+    def __init__(self, result):
+        super().__init__("dry run")
+        self.result = result
+
+
+def split(conn: sqlite3.Connection, project_id: int, story_id: int, data: SplitIn,
+          origin: Origin = "manual") -> list[Story]:
+    """Split a story into parts. Part 1 stays the original story (id, number, links);
+    the others are inserted right after it. Each original criterion moves to the part
+    that lists it; criteria no part lists are dropped."""
+    story = get_story(conn, project_id, story_id)
+    own = {c.id for c in story.criteria}
+    listed = [cid for part in data.parts for cid in part.criterion_ids]
+    if len(set(listed)) != len(listed) or not set(listed) <= own:
+        raise HTTPException(422, "Each of the story's criteria can go to one part at most")
+    try:
+        with conn:
+            record_undo(conn, project_id, "story_split", key=story.key, parts=len(data.parts))
+            first, rest = data.parts[0], data.parts[1:]
+            conn.execute("UPDATE stories SET role_name = ?, role_phrase = ?, action = ?, benefit = ?, "
+                         "updated_at = ? WHERE id = ?",
+                         (first.role_name or story.role_name, first.role_phrase, first.action,
+                          first.benefit, db.now(), story.id))
+            conn.execute("UPDATE stories SET position = position + ? WHERE project_id = ? AND position > ?",
+                         (len(rest), project_id, story.position))
+            if story.in_mvp:
+                conn.execute("UPDATE projects SET mvp_count = mvp_count + ? WHERE id = ?",
+                             (len(rest), project_id))
+            ids = [story.id]
+            for offset, part in enumerate(rest, start=1):
+                stamp = db.now()
+                cur = conn.execute(
+                    "INSERT INTO stories (project_id, number, role_name, role_phrase, action, benefit, "
+                    "status, position, size, origin, open_questions, notes, created_at, updated_at, "
+                    "needs_view) VALUES (?, ?, ?, ?, ?, ?, 'idea', ?, NULL, ?, '[]', '', ?, ?, ?)",
+                    (project_id, _next_number(conn, project_id), part.role_name or story.role_name,
+                     part.role_phrase, part.action, part.benefit, story.position + offset, origin,
+                     stamp, stamp, int(story.needs_view)))
+                ids.append(cur.lastrowid)
+                if data.link_mockups:
+                    conn.executemany("INSERT INTO story_mockups (story_id, mockup_id) VALUES (?, ?)",
+                                     [(cur.lastrowid, m) for m in story.mockup_ids])
+            dropped = own - set(listed)
+            conn.executemany("DELETE FROM criteria WHERE id = ?", [(cid,) for cid in dropped])
+            for part, new_id in zip(data.parts, ids):
+                for position, cid in enumerate(part.criterion_ids):
+                    conn.execute("UPDATE criteria SET story_id = ?, position = ? WHERE id = ?",
+                                 (new_id, position, cid))
+                append_criteria(conn, new_id, [(t, origin, None) for t in _clean(part.new_criteria)])
+            for new_id in ids:
+                check_status(conn, project_id, new_id, None)
+            db.touch_project(conn, project_id)
+            result = [s for s in stories(conn, project_id) if s.id in ids]
+            if data.dry_run:
+                raise _DryRun(result)
+    except _DryRun as preview:
+        return preview.result
+    return result
+
+
+def _same(text: str) -> str:
+    """Criteria that differ only in case, spacing or punctuation are the same criterion."""
+    return " ".join(re.sub(r"[^\w\s]", " ", text.casefold()).split())
+
+
+def merge(conn: sqlite3.Connection, project_id: int, data: MergeIn) -> MergeResult:
+    """Merge `remove` into `keep`: criteria, open questions and mockups are united
+    without duplicates; `remove` is deleted. Links and the chosen story move to `keep`."""
+    if data.keep_id == data.remove_id:
+        raise HTTPException(422, "Choose two different stories")
+    keep = get_story(conn, project_id, data.keep_id)
+    remove = get_story(conn, project_id, data.remove_id)
+    seen: set[str] = set()
+    merged: list[tuple[str, Origin, str | None]] = []
+    dropped: list[str] = []
+    for criterion in [*keep.criteria, *remove.criteria]:
+        if _same(criterion.text) in seen:
+            dropped.append(criterion.text)
+            continue
+        seen.add(_same(criterion.text))
+        merged.append((criterion.text, criterion.origin, criterion.component_id))
+    if data.criteria is not None:
+        by_text = {text: (text, origin, component) for text, origin, component in merged}
+        merged = [by_text.get(t, (t, "manual", None)) for t in _clean(data.criteria)]
+    questions = list(dict.fromkeys([*keep.open_questions, *remove.open_questions]))
+    try:
+        with conn:
+            record_undo(conn, project_id, "stories_merged", key=keep.key, removed=remove.key)
+            if data.wording:
+                w = data.wording
+                conn.execute("UPDATE stories SET role_name = ?, role_phrase = ?, action = ?, benefit = ? "
+                             "WHERE id = ?", (w.role_name or keep.role_name, w.role_phrase, w.action,
+                                              w.benefit, keep.id))
+            conn.execute("UPDATE stories SET open_questions = ?, updated_at = ? WHERE id = ?",
+                         (json.dumps(questions, ensure_ascii=False), db.now(), keep.id))
+            replace_criteria(conn, keep.id, merged)
+            conn.execute("INSERT OR IGNORE INTO story_mockups (story_id, mockup_id) "
+                         "SELECT ?, mockup_id FROM story_mockups WHERE story_id = ?", (keep.id, remove.id))
+            conn.execute("UPDATE projects SET current_story_id = ? WHERE id = ? AND current_story_id = ?",
+                         (keep.id, project_id, remove.id))
+            _remove(conn, project_id, remove)
+            check_status(conn, project_id, keep.id, None)
+            db.touch_project(conn, project_id)
+            result = MergeResult(story=get_story(conn, project_id, keep.id), removed_key=remove.key,
+                                 dropped_duplicates=dropped if data.criteria is None else [])
+            if data.dry_run:
+                raise _DryRun(result)
+    except _DryRun as preview:
+        return preview.result
+    return result
 
 
 def _compact(conn: sqlite3.Connection, project_id: int) -> None:
@@ -490,7 +665,19 @@ def remove_story(project_id: int, story_id: int, conn: sqlite3.Connection = Depe
 @router.put("/stories/order", status_code=204)
 def put_order(project_id: int, order: Order, conn: sqlite3.Connection = Depends(db.get_db)):
     _project(conn, project_id)
-    reorder(conn, project_id, order.ids)
+    reorder(conn, project_id, order)
+
+
+@router.post("/stories/{story_id}/split", response_model=list[Story])
+def post_split(project_id: int, story_id: int, data: SplitIn,
+               conn: sqlite3.Connection = Depends(db.get_db)):
+    return split(conn, project_id, story_id, data)
+
+
+@router.post("/stories/merge", response_model=MergeResult)
+def post_merge(project_id: int, data: MergeIn, conn: sqlite3.Connection = Depends(db.get_db)):
+    _project(conn, project_id)
+    return merge(conn, project_id, data)
 
 
 @router.post("/undo", response_model=Undo)

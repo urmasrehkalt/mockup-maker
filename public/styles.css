@@ -572,3 +572,40 @@ label.stacked { display: grid; gap: 4px; font-weight: 600; margin: 8px 0 0; }
 .ready-box summary { cursor: pointer; font-weight: 600; }
 .dor-ok { color: var(--ok); font-weight: 700; }
 dialog.editor label.check { margin-top: 12px; font-weight: 600; }
+
+/* --- grooming: MVP line, split, merge --------------------------------- */
+
+.mvp-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 8px 4px 4px;
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: var(--accent-soft);
+}
+.mvp-line .hint { font-weight: 400; }
+.mvp-actions { display: flex; gap: 4px; align-items: center; }
+.mvp-line .row-moves { opacity: 1; flex-direction: row; }
+.add-mvp { margin-top: 10px; border-style: dashed; }
+.grooming-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+dialog.grooming { width: min(760px, calc(100vw - 32px)); }
+dialog.grooming h3 { font-size: 0.95rem; margin: 16px 0 6px; }
+.split-parts { display: grid; gap: 10px; }
+.connextra-row { display: grid; grid-template-columns: 1fr auto 2fr auto 2fr; gap: 6px; align-items: center; margin-bottom: 6px; }
+.split-parts textarea { width: 100%; }
+table.assign { width: 100%; border-collapse: collapse; }
+table.assign td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+table.assign select { width: 100%; }
+.grooming-preview { display: grid; gap: 8px; }
+.preview-story { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.preview-story ol { margin: 4px 0 0; padding-left: 20px; }
+.dropped li { text-decoration: line-through; }
+.keep-choice { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
+dialog.grooming select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font: inherit; color: inherit; }
+@media (max-width: 640px) { .connextra-row { grid-template-columns: 1fr; } }

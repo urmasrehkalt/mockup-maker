@@ -44,6 +44,7 @@ class ProjectPatch(_Stripped):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=1000)
     step: Step | None = None
+    current_story_id: int | None = None  # the story to start with
 
 
 class Project(BaseModel):
@@ -52,6 +53,7 @@ class Project(BaseModel):
     description: str
     step: Step
     current_story_id: int | None = None
+    mvp_count: int | None = None
     created_at: str
     updated_at: str
 
@@ -115,6 +117,8 @@ def list_all(conn: sqlite3.Connection) -> list[Project]:
 def update(conn: sqlite3.Connection, project_id: int, patch: ProjectPatch) -> Project:
     get(conn, project_id)
     fields = patch.model_dump(exclude_none=True)
+    if "current_story_id" in fields:
+        backlog.get_story(conn, project_id, fields["current_story_id"])  # must be this project's
     if fields:
         fields["updated_at"] = db.now()
         assignments = ", ".join(f"{name} = ?" for name in fields)

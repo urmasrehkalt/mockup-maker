@@ -1,5 +1,9 @@
-// Backlog panel beside the conversation: manual add, edit, delete, reorder and undo.
+// Backlog panel beside the conversation: manual add, edit, delete, reorder, MVP line and undo.
 // Works without the AI; every change goes straight to the backlog API.
+//
+// The list is one ordered sequence of items: story ids and, when set, the "mvp"
+// marker for the MVP line. Dragging and the move buttons work on that sequence,
+// so stories and the line move the same way.
 
 import { api } from "../api.js";
 import { h, mount } from "../dom.js";
@@ -7,9 +11,11 @@ import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 import { openStoryEditor } from "./story-editor.js";
 
+const MVP = "mvp";
+
 /**
  * @param state   project state
- * @param reload  async () => void, reloads the project state and redraws
+ * @param reload  async () => state, reloads the project state and redraws
  */
 export function backlogPanel(state, reload) {
   const { stories, undo, project } = state;
@@ -25,9 +31,22 @@ export function backlogPanel(state, reload) {
     }
   }
 
-  const move = (ids) => act(() => api.reorderStories(project.id, ids));
+  const items = stories.map((s) => s.id);
+  if (project.mvp_count !== null && project.mvp_count !== undefined) items.splice(project.mvp_count, 0, MVP);
+
+  const commit = (next) => act(() => {
+    const line = next.indexOf(MVP);
+    const ids = next.filter((item) => item !== MVP);
+    return api.reorderStories(project.id, ids, line === -1 ? { keep_mvp: false } : { mvp_count: line });
+  });
+  const moved = (item, to) => {
+    const next = items.filter((x) => x !== item);
+    next.splice(to, 0, item);
+    return next;
+  };
   const edit = (story) => openStoryEditor(state, story, reload);
   const undoLabel = undo ? t(`undo.${undo.action}`, undo.params) : null;
+  const hasLine = items.includes(MVP);
 
   return h("aside", { class: "backlog card", "aria-labelledby": "backlog-title" },
     h("div", { class: "panel-head" },
@@ -40,22 +59,41 @@ export function backlogPanel(state, reload) {
     undoLabel ? h("p", { class: "hint undo-hint" }, t("backlog.undo_what", { what: undoLabel })) : null,
     status,
     stories.length
-      ? h("ol", { class: "story-list" }, stories.map((story, i) =>
-        storyRow(story, i, stories, move, edit, story.id === project.current_story_id)))
-      : h("p", { class: "muted" }, t("backlog.empty")));
+      ? h("ol", { class: "story-list" }, items.map((item, index) => {
+        const row = item === MVP
+          ? mvpRow(index, items.length, commit, moved, () => commit(items.filter((x) => x !== MVP)))
+          : storyRow(stories.find((s) => s.id === item), index, items.length, edit, commit, moved,
+            item === project.current_story_id);
+        draggable(row, item, items, commit);
+        return row;
+      }))
+      : h("p", { class: "muted" }, t("backlog.empty")),
+    stories.length && !hasLine ? h("button", { type: "button", class: "small add-mvp",
+      onclick: () => commit(moved(MVP, Math.min(3, stories.length))) }, `+ ${t("backlog.add_mvp")}`) : null);
 }
 
 const warned = (story) => story.criteria.filter((c) => c.issues.length).length;
 
-function storyRow(story, index, stories, move, edit, current) {
-  const ids = stories.map((s) => s.id);
-  const shifted = (to) => {
-    const next = ids.filter((id) => id !== story.id);
-    next.splice(to, 0, story.id);
-    return next;
-  };
+function moveButtons(label, index, count, item, commit, moved) {
+  return h("span", { class: "row-moves" },
+    h("button", { type: "button", class: "icon", disabled: index === 0,
+      "aria-label": t("backlog.move_up", { key: label }), onclick: () => commit(moved(item, index - 1)) }, "↑"),
+    h("button", { type: "button", class: "icon", disabled: index === count - 1,
+      "aria-label": t("backlog.move_down", { key: label }), onclick: () => commit(moved(item, index + 1)) }, "↓"));
+}
 
-  const row = h("li", { class: `story-row ${current ? "current" : ""}`, draggable: "true", dataset: { id: story.id } },
+function mvpRow(index, count, commit, moved, remove) {
+  return h("li", { class: "mvp-line", draggable: "true", role: "separator", "aria-label": t("backlog.mvp_line") },
+    h("span", { class: "drag-handle", "aria-hidden": "true" }, "⋮⋮"),
+    h("span", { class: "mvp-label" }, t("backlog.mvp_line"), h("span", { class: "hint" }, ` ${t("backlog.mvp_hint")}`)),
+    h("span", { class: "mvp-actions" },
+      moveButtons(t("backlog.mvp_line"), index, count, MVP, commit, moved),
+      h("button", { type: "button", class: "icon", "aria-label": t("backlog.remove_mvp"),
+        onclick: remove }, "✕")));
+}
+
+function storyRow(story, index, count, edit, commit, moved, current) {
+  return h("li", { class: `story-row ${current ? "current" : ""} ${story.in_mvp ? "in-mvp" : ""}`, draggable: "true", dataset: { id: story.id } },
     h("span", { class: "drag-handle", "aria-hidden": "true", title: t("backlog.drag") }, "⋮⋮"),
     h("button", { type: "button", class: "story-open", onclick: () => edit(story),
       "aria-label": t("backlog.edit_story", { key: story.key }) },
@@ -71,14 +109,13 @@ function storyRow(story, index, stories, move, edit, current) {
         story.status !== "ready" && !story.readiness.length ? h("span", { class: "dor-ok", title: t("ready.summary_ok") }, "DoR ✓") : null,
         h("span", { class: "origin", title: t(`backlog.origin.${story.origin}`) }, story.origin === "ai" ? "AI" : "✎")),
       h("span", { class: "story-title" }, story.title)),
-    h("span", { class: "row-moves" },
-      h("button", { type: "button", class: "icon", disabled: index === 0,
-        "aria-label": t("backlog.move_up", { key: story.key }), onclick: () => move(shifted(index - 1)) }, "↑"),
-      h("button", { type: "button", class: "icon", disabled: index === stories.length - 1,
-        "aria-label": t("backlog.move_down", { key: story.key }), onclick: () => move(shifted(index + 1)) }, "↓")));
+    moveButtons(story.key, index, count, story.id, commit, moved));
+}
 
+// Drag and drop over the whole sequence (stories and the MVP line alike).
+function draggable(row, item, items, commit) {
   row.addEventListener("dragstart", (e) => {
-    e.dataTransfer.setData("text/plain", String(story.id));
+    e.dataTransfer.setData("text/plain", String(item));
     e.dataTransfer.effectAllowed = "move";
     row.classList.add("dragging");
   });
@@ -94,11 +131,11 @@ function storyRow(story, index, stories, move, edit, current) {
     e.preventDefault();
     const after = row.classList.contains("drop-after");
     row.classList.remove("drop-before", "drop-after");
-    const dragged = Number(e.dataTransfer.getData("text/plain"));
-    if (!dragged || dragged === story.id) return;
-    const next = ids.filter((id) => id !== dragged);
-    next.splice(next.indexOf(story.id) + (after ? 1 : 0), 0, dragged);
-    move(next);
+    const raw = e.dataTransfer.getData("text/plain");
+    const dragged = raw === MVP ? MVP : Number(raw);
+    if (!raw || dragged === item) return;
+    const next = items.filter((x) => x !== dragged);
+    next.splice(next.indexOf(item) + (after ? 1 : 0), 0, dragged);
+    commit(next);
   });
-  return row;
 }

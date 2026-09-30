@@ -131,6 +131,10 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE stories ADD COLUMN needs_view INTEGER NOT NULL DEFAULT 1;
     """,
+    # 9: the MVP line, as the number of stories above it (NULL: no line)
+    """
+    ALTER TABLE projects ADD COLUMN mvp_count INTEGER;
+    """,
 ]
 
 
