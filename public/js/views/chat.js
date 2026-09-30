@@ -1,7 +1,7 @@
 // The guided conversation: message history, answer cards, next steps, composer.
 // Only the latest assistant message is interactive; older cards show what was chosen.
 
-import { h } from "../dom.js";
+import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { api } from "../api.js";
 import { renderTree } from "../mockup/render.js";
@@ -48,11 +48,12 @@ function author(role) {
 function userMessage(message) {
   const input = message.content.input ?? {};
   // Answers, role choices and added stories are shown on the card they answer.
-  if (["answer", "roles", "stories", "focus", "criteria"].includes(input.kind)) return null;
+  if (["answer", "roles", "stories", "focus", "criteria", "change"].includes(input.kind)) return null;
   let text;
   switch (input.kind) {
     case "text": text = input.text; break;
     case "next": text = input.label; break;
+    case "refine": text = t("chat.refine_other", { text: input.text }); break;
     default: text = message.content.text ?? "";
   }
   return h("div", { class: "message user" }, author("user"), h("p", {}, text));
@@ -68,6 +69,7 @@ function assistantMessage(message, live, send, state) {
     c.stories ? storiesCard(message, live, send) : null,
     c.priority ? priorityCard(message, live, send, state) : null,
     c.proposal ? proposalCard(message, live, send, state) : null,
+    c.change ? changeCard(message, live, send, state) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
 }
 
@@ -336,6 +338,119 @@ function criterionRow(row, redraw, highlight, drop) {
   return item;
 }
 
+// --- refinement: change with before/after preview ------------------------
+
+// Ids of components that are new or different in `after` compared with `before`.
+function changedIds(before, after) {
+  const flat = (tree) => {
+    const out = new Map();
+    const walk = (node) => {
+      const { children, ...own } = node;
+      out.set(node.id, JSON.stringify(own));
+      (children ?? []).forEach(walk);
+    };
+    (tree?.components ?? []).forEach(walk);
+    return out;
+  };
+  const old = flat(before);
+  return [...flat(after)].filter(([id, value]) => old.get(id) !== value).map(([id]) => id);
+}
+
+function mockupPair(before, after) {
+  const afterView = h("div", { class: "proposal-mockup" }, renderTree(after));
+  changedIds(before, after).forEach((id) =>
+    afterView.querySelectorAll(`[data-component-id="${CSS.escape(id)}"]`).forEach((el) => el.classList.add("wf-changed")));
+  return h("div", { class: "change-mockups" },
+    h("figure", {}, h("figcaption", {}, t("chat.before")),
+      before ? h("div", { class: "proposal-preview" }, h("div", { class: "proposal-mockup" }, renderTree(before)))
+        : h("p", { class: "hint" }, t("chat.no_mockup"))),
+    h("figure", {}, h("figcaption", {}, t("chat.after")),
+      h("button", { type: "button", class: "proposal-preview", "aria-label": t("mockup.open", { title: after.title }),
+        onclick: () => openMockupViewer({ title: after.title, version: "·", tree: after }) }, afterView)));
+}
+
+function criteriaDiff(before, after) {
+  if (!after) return h("p", { class: "hint" }, t("chat.criteria_unchanged"));
+  const beforeTexts = new Set(before.map((c) => c.text));
+  const afterTexts = new Set(after.map((c) => c.text));
+  return h("ul", { class: "criteria-diff" },
+    after.map((c) => h("li", { class: beforeTexts.has(c.text) ? "same" : "added" },
+      beforeTexts.has(c.text) ? null : h("span", { class: "diff-mark" }, "+ "), c.text, issueList(c.issues))),
+    before.filter((c) => !afterTexts.has(c.text)).map((c) =>
+      h("li", { class: "removed" }, h("span", { class: "diff-mark" }, "− "), c.text)));
+}
+
+function changeCard(message, live, send, state) {
+  const c = message.content.change;
+  const heading = h("div", { class: "card-title" }, t("chat.change_title", { key: c.story_key }));
+  if (c.decided || !live) {
+    return h("div", { class: "card-block answered" }, heading,
+      h("p", { class: "muted" }, !c.decided ? t("chat.change_not_decided")
+        : c.decided.applied ? t(c.decided.version ? "chat.change_applied_version" : "chat.change_applied", { version: c.decided.version })
+          : t("chat.change_discarded")));
+  }
+
+  const changesStory = Boolean(c.wording || c.criteria || c.mockup);
+  const refinement = [...state.messages].reverse().find((m) => m.id < message.id && m.role === "user")?.content.input?.text ?? "";
+  const body = h("div", { class: "change-body" });
+  const actions = h("div", { class: "card-actions" });
+
+  const preview = () => {
+    mount(body, 
+      h("p", {}, c.summary),
+      changesStory ? null : h("p", { class: "hint" }, t("chat.change_none_here")),
+      c.wording ? h("div", { class: "change-section" }, h("h4", {}, t("chat.change_wording")),
+        h("p", { class: "removed" }, c.before.title), h("p", { class: "added" }, c.after_title)) : null,
+      changesStory ? h("div", { class: "change-section" }, h("h4", {}, t("editor.criteria")), criteriaDiff(c.before.criteria, c.criteria)) : null,
+      c.mockup ? h("div", { class: "change-section" }, h("h4", {}, t("mockup.section")), mockupPair(c.before.mockup, c.mockup)) : null,
+      c.other_stories.length ? h("div", { class: "change-section other-stories" }, h("h4", {}, t("chat.other_stories")),
+        h("ul", {}, c.other_stories.map((o) => {
+          const story = state.stories.find((s) => s.key === o.story_key);
+          return h("li", {}, h("strong", {}, o.story_key), `: ${o.reason} `,
+            story ? h("button", { type: "button", class: "small", onclick: () =>
+              send({ kind: "refine", story_id: story.id, text: refinement || c.summary }) }, t("chat.separate_change")) : null);
+        }))) : null);
+    if (!changesStory) {
+      mount(actions, h("button", { type: "button", onclick: () =>
+        send({ kind: "change", message_id: message.id, decision: "discard" }) }, t("mockup.close")));
+      return;
+    }
+    mount(actions, 
+      h("button", { type: "button", class: "quiet-button", onclick: () => send({ kind: "change", message_id: message.id, decision: "discard" }) }, t("chat.discard")),
+      h("button", { type: "button", onclick: editMode }, `✎ ${t("chat.edit")}`),
+      h("button", { type: "button", class: "primary", onclick: () => send({ kind: "change", message_id: message.id, decision: "apply" }) }, t("chat.apply")));
+  };
+
+  const editMode = () => {
+    const wording = c.wording ?? c.before.wording;
+    const fields = ["role_phrase", "action", "benefit"].map((name) => {
+      const input = h("input", { type: "text", maxlength: name === "role_phrase" ? 80 : 300, "aria-label": t(`editor.${name === "role_phrase" ? "phrase" : name}`) });
+      input.value = wording[name];
+      return [name, input];
+    });
+    const criteria = h("textarea", { rows: 6, "aria-label": t("editor.criteria") });
+    criteria.value = (c.criteria ?? c.before.criteria).map((x) => x.text).join("\n");
+    mount(body, 
+      h("p", { class: "hint" }, t("chat.change_edit_hint")),
+      h("div", { class: "change-section" }, h("h4", {}, t("chat.change_wording")),
+        fields.map(([name, input]) => h("label", { class: "stacked" }, t(`editor.${name === "role_phrase" ? "phrase" : name}`), input))),
+      h("div", { class: "change-section" }, h("h4", {}, t("editor.criteria")), h("p", { class: "hint" }, t("chat.one_per_line")), criteria));
+    mount(actions, 
+      h("button", { type: "button", onclick: preview }, t("editor.cancel")),
+      h("button", { type: "button", class: "primary", onclick: () => {
+        const edited = Object.fromEntries(fields.map(([name, input]) => [name, input.value.trim()]));
+        const same = ["role_phrase", "action", "benefit"].every((k) => edited[k] === c.before.wording[k]);
+        send({ kind: "change", message_id: message.id, decision: "apply", edits: {
+          wording: same ? null : edited,
+          criteria: criteria.value.split("\n").map((line) => line.trim()).filter(Boolean),
+        } });
+      } }, t("chat.apply_edited")));
+  };
+
+  preview();
+  return h("div", { class: "card-block change" }, heading, body, actions);
+}
+
 // --- next steps, resume, errors, composer --------------------------------
 
 function nextSteps(steps, send) {
@@ -381,8 +496,10 @@ function errorCard(error, send) {
 
 function composer(state, send, pending) {
   const start = state.messages.length === 0;
+  const refining = state.project.step === "refinements" && state.project.current_story_id;
+  const hint = start ? "chat.idea_hint" : refining ? "chat.refinement_hint" : "chat.free_hint";
   const box = h("textarea", { rows: start ? 3 : 2, maxlength: 4000, disabled: pending,
-    placeholder: t(start ? "chat.idea_hint" : "chat.free_hint"), "aria-label": t("chat.free_hint") });
+    placeholder: t(hint), "aria-label": t(hint) });
   const submit = () => {
     const text = box.value.trim();
     if (text) send({ kind: "text", text });

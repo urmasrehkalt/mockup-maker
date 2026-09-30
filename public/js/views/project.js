@@ -39,7 +39,10 @@ class ProjectPage {
   async send(input) {
     if (this.pending) return;
     this.pending = true;
-    this.slow = input.kind === "focus" || (input.kind === "next" && input.step === "criteria");
+    const step = this.state.project.step;
+    this.slow = input.kind === "focus" || input.kind === "refine"
+      || (input.kind === "next" && input.step === "criteria")
+      || (input.kind === "text" && step === "refinements" && this.state.project.current_story_id);
     this.error = null;
     if (input.kind !== "retry") this.optimistic(input);
     this.draw();

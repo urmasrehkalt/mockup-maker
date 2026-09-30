@@ -163,7 +163,13 @@ def _dump(conn: sqlite3.Connection, project_id: int) -> str:
     link_rows = [dict(r) for r in conn.execute(
         "SELECT l.* FROM story_mockups l JOIN stories s ON s.id = l.story_id WHERE s.project_id = ?",
         (project_id,))]
-    return json.dumps({"stories": story_rows, "criteria": criteria_rows, "links": link_rows},
+    versions = {str(r["mockup_id"]): r["latest"] for r in conn.execute(
+        "SELECT v.mockup_id, MAX(v.number) AS latest FROM mockup_versions v JOIN mockups m "
+        "ON m.id = v.mockup_id WHERE m.project_id = ? GROUP BY v.mockup_id", (project_id,))}
+    newest_mockup = conn.execute("SELECT COALESCE(MAX(id), 0) FROM mockups WHERE project_id = ?",
+                                 (project_id,)).fetchone()[0]
+    return json.dumps({"stories": story_rows, "criteria": criteria_rows, "links": link_rows,
+                       "mockup_versions": versions, "newest_mockup": newest_mockup},
                       ensure_ascii=False)
 
 
@@ -223,6 +229,7 @@ def undo(conn: sqlite3.Connection, project_id: int) -> Undo:
         _upsert(conn, "criteria", before["criteria"])
         conn.execute("DELETE FROM story_mockups WHERE story_id IN "
                      "(SELECT id FROM stories WHERE project_id = ?)", (project_id,))
+        _restore_mockups(conn, project_id, before)
         conn.executemany("INSERT OR IGNORE INTO story_mockups (story_id, mockup_id) "
                          "SELECT ?, id FROM mockups WHERE id = ?",
                          [(link["story_id"], link["mockup_id"]) for link in before.get("links", [])])
@@ -232,6 +239,20 @@ def undo(conn: sqlite3.Connection, project_id: int) -> Undo:
 
 
 # --- changing ------------------------------------------------------------
+
+def _restore_mockups(conn: sqlite3.Connection, project_id: int, before: dict) -> None:
+    """Drop mockups and mockup versions created after the snapshot was taken."""
+    if "newest_mockup" not in before:
+        return  # a snapshot from before mockups were covered
+    conn.execute("DELETE FROM mockups WHERE project_id = ? AND id > ?", (project_id, before["newest_mockup"]))
+    for mockup_id, latest in before["mockup_versions"].items():
+        conn.execute("DELETE FROM mockup_versions WHERE mockup_id = ? AND number > ?", (int(mockup_id), latest))
+        title = conn.execute("SELECT tree FROM mockup_versions WHERE mockup_id = ? AND number = ?",
+                             (int(mockup_id), latest)).fetchone()
+        if title:
+            conn.execute("UPDATE mockups SET title = ? WHERE id = ?",
+                         (json.loads(title["tree"])["title"], int(mockup_id)))
+
 
 def _next_number(conn: sqlite3.Connection, project_id: int) -> int:
     conn.execute("UPDATE projects SET story_seq = story_seq + 1 WHERE id = ?", (project_id,))
@@ -250,6 +271,23 @@ def _set_criteria(conn: sqlite3.Connection, story_id: int, texts: list[str], ori
                      (old["id"] if old else None, story_id, text, position,
                       old["origin"] if old else origin, old["created_at"] if old else db.now(),
                       old["component_id"] if old else None))
+
+
+def replace_criteria(conn: sqlite3.Connection, story_id: int,
+                     items: list[tuple[str, Origin, str | None]]) -> None:
+    """Make (text, origin, component_id) the story's criteria. A criterion whose text is
+    unchanged keeps its row, origin and date; the rest are new rows."""
+    existing = {row["text"]: row for row in conn.execute(
+        "SELECT * FROM criteria WHERE story_id = ?", (story_id,))}
+    conn.execute("DELETE FROM criteria WHERE story_id = ?", (story_id,))
+    for position, (text, origin, component_id) in enumerate(items):
+        old = existing.get(text)
+        conn.execute("INSERT INTO criteria (id, story_id, text, position, origin, created_at, "
+                     "component_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (old["id"] if old else None, story_id, text, position,
+                      old["origin"] if old else origin, old["created_at"] if old else db.now(),
+                      component_id))
+    conn.execute("UPDATE stories SET updated_at = ? WHERE id = ?", (db.now(), story_id))
 
 
 def append_criteria(conn: sqlite3.Connection, story_id: int,

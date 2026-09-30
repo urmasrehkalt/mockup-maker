@@ -64,6 +64,34 @@ class Proposal(_Strict):
     mockup: mockups.Tree
 
 
+class Wording(_Strict):
+    role_phrase: str = Field(min_length=1, max_length=80)
+    action: str = Field(min_length=1, max_length=300)
+    benefit: str = Field(min_length=1, max_length=300)
+
+
+class OtherStory(_Strict):
+    story_key: str = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=300)
+
+
+class Change(_Strict):
+    """A client's refinement, as a change to ONE story. None fields stay as they are."""
+    story_key: str = Field(min_length=1, max_length=20)
+    summary: str = Field(min_length=1, max_length=400)
+    wording: Wording | None = None
+    criteria: list[ProposedCriterion] | None = Field(default=None, min_length=1, max_length=10)
+    mockup: mockups.Tree | None = None
+    other_stories: list[OtherStory] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def _changes_something(self):
+        if self.wording is None and self.criteria is None and self.mockup is None and not self.other_stories:
+            raise ValueError("a change must change the wording, the criteria or the mockup, or "
+                             "name the other stories it affects")
+        return self
+
+
 class NextStep(_Strict):
     label: str = Field(min_length=1, max_length=60)
     kind: Literal["reply", "end_meeting"]
@@ -80,14 +108,15 @@ class Turn(_Strict):
     stories: list[backlog.StoryParts] | None = Field(default=None, min_length=1, max_length=10)
     priority: PriorityCard | None = None
     proposal: Proposal | None = None
+    change: Change | None = None
     next_steps: list[NextStep] = Field(min_length=1, max_length=4)
 
     @model_validator(mode="after")
     def _one_card_and_a_way_on(self):
-        cards = (self.question, self.roles, self.stories, self.priority, self.proposal)
+        cards = (self.question, self.roles, self.stories, self.priority, self.proposal, self.change)
         if sum(1 for card in cards if card) > 1:
-            raise ValueError("one card per turn: a question, roles, stories, a priority or a "
-                             "proposal, not several")
+            raise ValueError("one card per turn: a question, roles, stories, a priority, a "
+                             "proposal or a change, not several")
         if not any(s.kind == "reply" for s in self.next_steps):
             raise ValueError("next_steps needs at least one option of kind 'reply'")
         return self
@@ -140,6 +169,19 @@ Rules for this turn:
   on the proposal: move to the refinements step and offer next steps such as the next story, a
   backlog review or ending the meeting. A next step cannot pick a story: to work on another story,
   offer the priorities step (the user chooses the story there), never "work on US-n" directly.
+- refinements step: when the user passes on something the client said about INPUT.current_story
+  (free text, or INPUT.user_input.kind "refine"), turn it into `change` for that story only:
+  `wording` (role_phrase, action, benefit) if the story's wording changes, `criteria` = the
+  story's FULL criteria list after the change (keep unchanged ones word for word, same rules as
+  above), `mockup` = the FULL mockup after the change (start from INPUT.current_story_detail's
+  mockup and keep the ids of everything that stays); null for what does not change. `summary`
+  says in one or two sentences what changes. Never change another story: if the refinement also
+  affects other stories in INPUT.backlog, list them in `other_stories` with the reason; the user
+  can ask for their change separately. If the refinement does not concern the chosen story at
+  all, still return `change` with wording, criteria and mockup null and the affected stories in
+  `other_stories`. For "refine", the refinement text is
+  INPUT.user_input.text. When INPUT.user_input.kind is "change" the user applied or discarded it:
+  acknowledge and ask what to do next (next story, backlog review, end the meeting).
 - Later steps: explain briefly what happens in the step and offer next steps; do not invent
   stories or criteria in the message text.
 - Free text: the user may ignore the buttons and write. If INPUT.open_question is set and the text
@@ -203,6 +245,25 @@ class CriteriaInput(_Strict):
     items: list[CriteriaItem] = Field(max_length=15)
 
 
+class ChangeEdits(_Strict):
+    wording: Wording | None = None
+    criteria: list[str] | None = Field(default=None, min_length=1, max_length=15)
+
+
+class ChangeInput(_Strict):
+    kind: Literal["change"]
+    message_id: int
+    decision: Literal["apply", "discard"]
+    edits: ChangeEdits | None = None
+
+
+class RefineInput(_Strict):
+    """Ask for a change to another story that a refinement affects."""
+    kind: Literal["refine"]
+    story_id: int
+    text: str = Field(min_length=1, max_length=2000)
+
+
 class NextInput(_Strict):
     kind: Literal["next"]
     label: str = Field(min_length=1, max_length=60)
@@ -214,7 +275,7 @@ class RetryInput(_Strict):
 
 
 UserInput = Annotated[TextInput | AnswerInput | RolesInput | StoriesInput | FocusInput
-                      | CriteriaInput | NextInput | RetryInput,
+                      | CriteriaInput | ChangeInput | RefineInput | NextInput | RetryInput,
                       Field(discriminator="kind")]
 
 
@@ -295,6 +356,12 @@ def apply_input(conn: sqlite3.Connection, project_id: int, data: Any) -> project
                 projects.update_message(conn, message.id, message.content)
         elif data.kind == "criteria":
             apply_criteria(conn, project_id, data)
+        elif data.kind == "change":
+            apply_change(conn, project_id, data)
+        elif data.kind == "refine":
+            story = backlog.get_story(conn, project_id, data.story_id)
+            conn.execute("UPDATE projects SET current_story_id = ?, step = 'refinements' WHERE id = ?",
+                         (story.id, project_id))
         elif data.kind == "next" and data.step:
             conn.execute("UPDATE projects SET step = ? WHERE id = ?", (data.step, project_id))
 
@@ -318,6 +385,8 @@ def describe(message: projects.Message) -> str:
         if content.get("proposal"):
             line += (f" [proposed {len(content['proposal']['criteria'])} criteria and a mockup "
                      f"for {content['proposal']['story_key']}]")
+        if content.get("change"):
+            line += f" [proposed a change to {content['change']['story_key']}]"
         return line
     data = content.get("input", {})
     match data.get("kind"):
@@ -335,6 +404,10 @@ def describe(message: projects.Message) -> str:
             return "Chose the story to start with"
         case "criteria":
             return f"Decided on the proposal: kept {len(data['items'])} criteria and the mockup"
+        case "change":
+            return "Applied the change" if data["decision"] == "apply" else "Discarded the change"
+        case "refine":
+            return f"Asked for a separate change: {data['text']}"
         case "next":
             return f"Chose: {data['label']}"
         case _:
@@ -382,12 +455,26 @@ def mock_turn(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload["user_input"]
     reply = lambda label, step=None: {"label": label, "kind": "reply", "step": step}  # noqa: E731
     base = {"interpreted_answer": None, "noted_fact": None, "question": None, "roles": None,
-            "stories": None, "priority": None, "proposal": None}
+            "stories": None, "priority": None, "proposal": None, "change": None}
     answered = len(payload["clarifications"])
     if payload["open_question"] and data["kind"] == "text":
         base["interpreted_answer"] = data["text"][:300]
         answered += 1
 
+    if data["kind"] == "change":
+        return {**base, "step": "refinements",
+                "message": ("Muudatus on rakendatud. " if data["decision"] == "apply" else "Muudatusest loobuti. ")
+                           + "Mida teeme edasi?",
+                "next_steps": [reply("Järgmine lugu", "priorities"),
+                               reply("Vaatame backlog'i üle", "grooming"),
+                               {"label": "Lõpetame kohtumise", "kind": "end_meeting", "step": None}]}
+    if payload["current_story"] and (data["kind"] == "refine" or (
+            payload["step"] == "refinements" and data["kind"] == "text")):
+        return {**base, "step": "refinements",
+                "message": "Muudatusettepanek: mockup'i lisandub märge ja kriteeriumide hulka üks "
+                           "kriteerium. Teisi lugusid see ei mõjuta.",
+                "change": mock_change(payload),
+                "next_steps": [reply("Järgmine lugu", "priorities")]}
     if data["kind"] == "criteria":
         return {**base, "step": "refinements",
                 "message": "Kriteeriumid ja mockup on loos. Kui klient soovib midagi täpsustada, "
@@ -473,6 +560,13 @@ def check_turn(turn: Turn, payload: dict[str, Any]) -> str | None:
         problem = _check_proposal(turn.proposal, payload)
         if problem:
             return problem
+    if turn.change:
+        problem = _check_change(turn.change, payload)
+        if problem:
+            return problem
+    if payload["user_input"]["kind"] == "refine" and not turn.change:
+        return (f"The user asked for a change to {payload.get('current_story')}: return it in "
+                "`change` in this same turn.")
     wants_proposal = payload.get("current_story") and (
         payload["user_input"]["kind"] == "focus"
         or (payload["user_input"]["kind"] == "next" and payload["user_input"].get("step") == "criteria"))
@@ -501,7 +595,8 @@ def _current_detail(conn: sqlite3.Connection, project: projects.Project) -> dict
         return None
     linked = [m for m in mockups.mockups(conn, project.id) if m.id in story.mockup_ids]
     return {"key": story.key, "title": story.title, "role_name": story.role_name,
-            "criteria": [c.text for c in story.criteria],
+            "role_phrase": story.role_phrase, "action": story.action, "benefit": story.benefit,
+            "criteria": [{"text": c.text, "component_id": c.component_id} for c in story.criteria],
             "mockup": linked[0].tree.model_dump() if linked else None}
 
 
@@ -532,6 +627,106 @@ def _with_issues(proposal: Proposal) -> dict[str, Any]:
     for criterion in data["criteria"]:
         criterion["issues"] = [i.model_dump() for i in testability.check(criterion["text"])]
     return data
+
+
+def _check_change(change: Change, payload: dict[str, Any]) -> str | None:
+    current = payload.get("current_story")
+    if change.story_key != current:
+        return (f"A change may only touch the chosen story {current}, not {change.story_key}; "
+                "list other affected stories in other_stories instead.")
+    keys = {story["key"] for story in payload["backlog"]}
+    strangers = [o.story_key for o in change.other_stories if o.story_key not in keys or o.story_key == current]
+    if strangers:
+        return f"other_stories must be other stories from INPUT.backlog; not {strangers}."
+    detail = payload.get("current_story_detail") or {}
+    tree = change.mockup or (mockups.Tree(**detail["mockup"]) if detail.get("mockup") else None)
+    ids = mockups.component_ids(tree) if tree else set()
+    dangling = [c.component_id for c in change.criteria or [] if c.component_id and c.component_id not in ids]
+    if dangling:
+        return f"Criteria refer to components that are not in the mockup: {dangling}."
+    untestable = [testability.describe(c.text, issues) for c in change.criteria or []
+                  if (issues := testability.check(c.text))]
+    if untestable:
+        return ("Some criteria cannot be answered with yes or no: " + " | ".join(untestable)
+                + ". Rewrite each as one simple, checkable condition.")
+    return None
+
+
+def _stored_change(conn: sqlite3.Connection, project_id: int, change: Change) -> dict[str, Any] | None:
+    """The change card as stored: the proposal plus the story as it is now, for the
+    before/after preview. A change for any story but the chosen one is never stored."""
+    project = projects.get(conn, project_id)
+    story = (backlog.get_story(conn, project_id, project.current_story_id)
+             if project.current_story_id else None)
+    if story is None or story.key != change.story_key:
+        return None
+    linked = [m for m in mockups.mockups(conn, project_id) if m.id in story.mockup_ids]
+    data = change.model_dump()
+    for criterion in data["criteria"] or []:
+        criterion["issues"] = [i.model_dump() for i in testability.check(criterion["text"])]
+    data["story_id"] = story.id
+    data["before"] = {
+        "title": story.title,
+        "wording": {"role_phrase": story.role_phrase, "action": story.action, "benefit": story.benefit},
+        "criteria": [{"text": c.text, "component_id": c.component_id} for c in story.criteria],
+        "mockup_id": linked[0].id if linked else None,
+        "mockup": linked[0].tree.model_dump() if linked else None,
+    }
+    if change.wording:
+        data["after_title"] = backlog.title(backlog.StoryParts(
+            role_name=story.role_name, **change.wording.model_dump()))
+    return data
+
+
+def apply_change(conn: sqlite3.Connection, project_id: int, data: ChangeInput) -> None:
+    """Apply or discard a change card. Only the card's own story is touched."""
+    message = projects.get_message(conn, project_id, data.message_id)
+    change = message.content.get("change") if message.role == "assistant" else None
+    if not change:
+        raise HTTPException(400, "That message has no change to decide on")
+    if "decided" in change:
+        raise HTTPException(409, "That change was already decided on")
+    changes_story = any(change[k] is not None for k in ("wording", "criteria", "mockup"))
+    if data.decision == "discard" or not changes_story:
+        if data.decision == "apply":
+            raise HTTPException(409, "That change does not change this story; ask for the other stories separately")
+        change["decided"] = {"applied": False}
+        projects.update_message(conn, message.id, message.content)
+        return
+
+    story = backlog.get_story(conn, project_id, change["story_id"])
+    edits = data.edits or ChangeEdits()
+    wording = edits.wording or (Wording(**change["wording"]) if change["wording"] else None)
+    new_tree = mockups.Tree(**change["mockup"]) if change["mockup"] else None
+    backlog.record_undo(conn, project_id, "story_refined", key=story.key)
+
+    if wording:
+        conn.execute("UPDATE stories SET role_phrase = ?, action = ?, benefit = ?, updated_at = ? "
+                     "WHERE id = ?", (wording.role_phrase, wording.action, wording.benefit,
+                                      db.now(), story.id))
+    proposed = change["criteria"]
+    if edits.criteria is not None:
+        by_position = proposed or change["before"]["criteria"]
+        items = []
+        for i, text in enumerate(" ".join(t.split()) for t in edits.criteria):
+            if not text:
+                continue
+            match = next((c for c in by_position if c["text"] == text), None)
+            component = (match or (by_position[i] if i < len(by_position) else {})).get("component_id")
+            items.append((text, "ai" if match and proposed else "manual", component))
+        backlog.replace_criteria(conn, story.id, items)
+    elif proposed is not None:
+        backlog.replace_criteria(conn, story.id, [(c["text"], "ai", c["component_id"]) for c in proposed])
+
+    version = None
+    if new_tree:
+        mockup_id, version = mockups.update_for_story(conn, project_id, story.id,
+                                                      change["before"]["mockup_id"], new_tree,
+                                                      note=f"change:{message.id}")
+        change["decided"] = {"applied": True, "mockup_id": mockup_id, "version": version}
+    else:
+        change["decided"] = {"applied": True}
+    projects.update_message(conn, message.id, message.content)
 
 
 def apply_criteria(conn: sqlite3.Connection, project_id: int, data: CriteriaInput) -> None:
@@ -600,6 +795,24 @@ MOCK_PROPOSALS = {
 }
 
 
+def mock_change(payload: dict[str, Any]) -> dict[str, Any]:
+    """Add a note under the view's main heading and one criterion that checks it."""
+    from .mockup_templates import TEMPLATES
+    detail = payload["current_story_detail"] or {}
+    tree = detail.get("mockup") or TEMPLATES["detail"][1]
+    components = [dict(c) for c in tree["components"]]
+    note = {"id": "refinement-note", "type": "note", "text": "Hinnad sisaldavad käibemaksu (sh km)"}
+    at = next((i + 1 for i, c in enumerate(components) if c["type"] == "heading"), len(components))
+    if not any(c["id"] == "refinement-note" for c in components):
+        components.insert(at, note)
+    criteria = [dict(c) for c in detail.get("criteria", [])]
+    criteria.append({"text": "Hinna all on märge „sh km“.", "component_id": "refinement-note"})
+    return {"story_key": payload["current_story"],
+            "summary": "Mockup'i lisandub hinna alla märge „sh km“ ja kriteeriumide hulka üks kriteerium.",
+            "wording": None, "criteria": criteria,
+            "mockup": {"title": tree["title"], "components": components}, "other_stories": []}
+
+
 def mock_proposal(payload: dict[str, Any]) -> dict[str, Any]:
     from .mockup_templates import TEMPLATES
     detail = payload["current_story_detail"] or {}
@@ -650,6 +863,7 @@ async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> pro
         "stories": [st.model_dump() for st in turn.stories] if turn.stories else None,
         "priority": turn.priority.model_dump() if turn.priority else None,
         "proposal": _with_issues(turn.proposal) if turn.proposal else None,
+        "change": _stored_change(conn, project_id, turn.change) if turn.change else None,
         "next_steps": [s.model_dump() for s in turn.next_steps],
     })
     return projects.state(conn, project_id)

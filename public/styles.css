@@ -526,3 +526,25 @@ dialog.viewer { width: min(1100px, calc(100vw - 32px)); }
 .line-issues .issues { margin: 2px 0 4px; }
 .warn-count { color: var(--warn); font-weight: 700; }
 .criterion:has(.issues) { border-color: var(--warn); }
+
+/* --- refinement change card ------------------------------------------- */
+
+.message.assistant:has(.change) { max-width: 100%; }
+.change-section { margin-top: 12px; }
+.change-section h4 { margin: 0 0 4px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+.change-section p.removed { text-decoration: line-through; color: var(--muted); margin: 0; }
+.change-section p.added { font-weight: 600; margin: 2px 0 0; }
+.criteria-diff { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.criteria-diff .added { color: var(--ok); font-weight: 600; }
+.criteria-diff .removed { color: var(--error); text-decoration: line-through; }
+.diff-mark { font-weight: 700; }
+.change-mockups { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.change-mockups figure { margin: 0; }
+.change-mockups figcaption { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.change-mockups .proposal-preview { width: 100%; }
+.change-mockups .proposal-mockup { zoom: 0.4; }
+.wf-changed { outline: 3px solid #2f9e44; outline-offset: 2px; border-radius: 3px; }
+.other-stories ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+label.stacked { display: grid; gap: 4px; font-weight: 600; margin: 8px 0 0; }
+.change textarea { width: 100%; }
+@media (max-width: 700px) { .change-mockups { grid-template-columns: 1fr; } }

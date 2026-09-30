@@ -216,6 +216,28 @@ def add_version(conn: sqlite3.Connection, mockup_id: int, tree: Tree, note: str)
     return number
 
 
+def update_for_story(conn: sqlite3.Connection, project_id: int, story_id: int, mockup_id: int | None,
+                     tree: Tree, note: str) -> tuple[int, int]:
+    """Give a story a new version of its mockup without touching any other story.
+
+    If the mockup is also linked to other stories, the story gets its own copy
+    (a new mockup) instead, so a refinement of one story never changes another's
+    view. Returns (mockup id, version number). Caller owns the transaction.
+    """
+    if mockup_id is None:
+        created = create(conn, project_id, tree, note=note, story_id=story_id)
+        return created.id, created.version
+    shared = conn.execute("SELECT COUNT(*) FROM story_mockups WHERE mockup_id = ? AND story_id != ?",
+                          (mockup_id, story_id)).fetchone()[0]
+    if shared:
+        conn.execute("DELETE FROM story_mockups WHERE story_id = ? AND mockup_id = ?", (story_id, mockup_id))
+        created = create(conn, project_id, tree, note=note, story_id=story_id)
+        return created.id, created.version
+    version = add_version(conn, mockup_id, tree, note)
+    db.touch_project(conn, project_id)
+    return mockup_id, version
+
+
 def link(conn: sqlite3.Connection, project_id: int, story_id: int, mockup_id: int) -> None:
     story = backlog.get_story(conn, project_id, story_id)
     get_mockup(conn, project_id, mockup_id)
@@ -262,6 +284,8 @@ def post_mockup(project_id: int, data: MockupIn, conn: sqlite3.Connection = Depe
     with conn:
         if story:
             backlog.record_undo(conn, project_id, "mockup_linked", key=story.key)
+        else:
+            backlog.record_undo(conn, project_id, "mockup_created", title=tree.title)
         return create(conn, project_id, tree, note=f"template:{data.template}" if data.template else "manual",
                       story_id=story.id if story else None)
 
