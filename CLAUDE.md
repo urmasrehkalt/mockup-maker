@@ -49,6 +49,7 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   New AI features define a `Task` (instructions, response model, mock answer).
 
 Frontend: ES modules in `public/js/` (`app.js` hash router, `views/`, `api.js`, `i18n.js`).
+The header and every page share `--page-width` in `styles.css`, so their edges line up.
 UI strings: `t()` in the viewer's language (every key in both `et` and `en`). A project's content
 language (`projects.language`) is separate: story sentences use `storyTitle()`/`contentText()`
 with it, never `t()`. Build DOM only through `dom.js` `h()`, which inserts text as text nodes:
