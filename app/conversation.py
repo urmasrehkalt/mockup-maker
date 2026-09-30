@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from . import backlog, db, mockups, projects
+from . import backlog, db, mockups, projects, testability
 from .ai import Task, run_task
 from .projects import Role, Step
 
@@ -517,7 +517,21 @@ def _check_proposal(proposal: Proposal, payload: dict[str, Any]) -> str | None:
     if not any(c.component_id for c in proposal.criteria):
         return ("No criterion refers to the mockup: set component_id on every criterion about "
                 "what the view shows.")
+    untestable = [testability.describe(c.text, issues) for c in proposal.criteria
+                  if (issues := testability.check(c.text))]
+    if untestable:
+        return ("Some criteria cannot be answered with yes or no: " + " | ".join(untestable)
+                + ". Rewrite each as one simple, checkable condition.")
     return None
+
+
+def _with_issues(proposal: Proposal) -> dict[str, Any]:
+    """The proposal as stored: each criterion carries its testability warnings (if the model
+    kept an untestable one after the retry, the user sees why)."""
+    data = proposal.model_dump()
+    for criterion in data["criteria"]:
+        criterion["issues"] = [i.model_dump() for i in testability.check(criterion["text"])]
+    return data
 
 
 def apply_criteria(conn: sqlite3.Connection, project_id: int, data: CriteriaInput) -> None:
@@ -635,7 +649,7 @@ async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> pro
         "roles": [r.model_dump() for r in turn.roles] if turn.roles else None,
         "stories": [st.model_dump() for st in turn.stories] if turn.stories else None,
         "priority": turn.priority.model_dump() if turn.priority else None,
-        "proposal": turn.proposal.model_dump() if turn.proposal else None,
+        "proposal": _with_issues(turn.proposal) if turn.proposal else None,
         "next_steps": [s.model_dump() for s in turn.next_steps],
     })
     return projects.state(conn, project_id)

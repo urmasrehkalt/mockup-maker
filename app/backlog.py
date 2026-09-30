@@ -19,7 +19,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import db
+from . import db, testability
 
 Status = Literal["idea", "needs_clarification", "reviewed", "ready"]
 Size = Literal["S", "M", "L"]
@@ -69,6 +69,7 @@ class Criterion(BaseModel):
     text: str
     origin: Origin
     component_id: str | None = None
+    issues: list[testability.Issue] = []
 
 
 class Story(StoryParts):
@@ -119,7 +120,7 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
             "WHERE s.project_id = ? ORDER BY c.position, c.id", (project_id,)):
         criteria.setdefault(row["story_id"], []).append(
             Criterion(id=row["id"], text=row["text"], origin=row["origin"],
-                      component_id=row["component_id"]))
+                      component_id=row["component_id"], issues=testability.check(row["text"])))
     links: dict[int, list[int]] = {}
     for row in conn.execute(
             "SELECT l.story_id, l.mockup_id FROM story_mockups l JOIN stories s ON s.id = l.story_id "

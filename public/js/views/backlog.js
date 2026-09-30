@@ -45,6 +45,8 @@ export function backlogPanel(state, reload) {
       : h("p", { class: "muted" }, t("backlog.empty")));
 }
 
+const warned = (story) => story.criteria.filter((c) => c.issues.length).length;
+
 function storyRow(story, index, stories, move, edit, current) {
   const ids = stories.map((s) => s.id);
   const shifted = (to) => {
@@ -63,6 +65,7 @@ function storyRow(story, index, stories, move, edit, current) {
         h("span", { class: `status status-${story.status}` }, t(`status.${story.status}`)),
         story.size ? h("span", { class: "size" }, story.size) : null,
         story.criteria.length ? h("span", { class: "muted" }, t("backlog.criteria_count", { count: story.criteria.length })) : null,
+        warned(story) ? h("span", { class: "warn-count", title: t("backlog.untestable") }, `⚠ ${warned(story)}`) : null,
         story.mockup_ids.length ? h("span", { class: "muted", title: t("mockup.section") }, t("backlog.mockup_count", { count: story.mockup_ids.length })) : null,
         story.open_questions.length ? h("span", { class: "open-q" }, `? ${story.open_questions.length}`) : null,
         h("span", { class: "origin", title: t(`backlog.origin.${story.origin}`) }, story.origin === "ai" ? "AI" : "✎")),

@@ -3,7 +3,7 @@
 import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
-import { errorText, notice } from "../ui.js";
+import { errorText, issueList, notice } from "../ui.js";
 import { storyMockups } from "../mockup/story-mockups.js";
 
 const STATUSES = ["idea", "needs_clarification", "reviewed", "ready"];
@@ -31,7 +31,7 @@ export function openStoryEditor(state, story, reload) {
   const status = h("select", { id: "st-status" }, STATUSES.map((v) => h("option", { value: v }, t(`status.${v}`))));
   status.value = story?.status ?? "idea";
   const notes = field("textarea", { id: "st-notes", rows: 2, maxlength: 2000 }, story?.notes);
-  const criteria = lineList(story?.criteria.map((c) => c.text) ?? [], t("editor.add_criterion"), t("editor.criterion_hint"));
+  const criteria = lineList(story?.criteria.map((c) => c.text) ?? [], t("editor.add_criterion"), t("editor.criterion_hint"), true);
   const questions = lineList(story?.open_questions ?? [], t("editor.add_question"), t("editor.question_hint"));
   const preview = h("p", { class: "title-preview" });
   const errors = h("div", { class: "form-status" });
@@ -115,14 +115,26 @@ export function openStoryEditor(state, story, reload) {
 }
 
 // An editable list of one-line texts (criteria, open questions).
-function lineList(initial, addLabel, placeholder) {
+// With `checked`, each line shows its testability warnings as the user types.
+function lineList(initial, addLabel, placeholder, checked = false) {
   const list = h("ol", { class: "line-list" });
   const addLine = (value = "", focus = false) => {
     const input = h("input", { type: "text", maxlength: 500, placeholder });
     input.value = value;
+    const warnings = h("div", { class: "line-issues", "aria-live": "polite" });
     const item = h("li", {}, input,
       h("button", { type: "button", class: "icon", "aria-label": t("editor.remove_line"),
-        onclick: () => item.remove() }, "×"));
+        onclick: () => item.remove() }, "×"), checked ? warnings : null);
+    if (checked) {
+      let timer;
+      const recheck = async () => {
+        const text = input.value.trim();
+        const issues = text ? await api.checkCriteria([text]).then((r) => r[0]).catch(() => []) : [];
+        mount(warnings, issueList(issues));
+      };
+      input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(recheck, 300); });
+      if (value) recheck();
+    }
     list.append(item);
     if (focus) input.focus();
   };

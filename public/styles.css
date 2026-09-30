@@ -517,3 +517,12 @@ dialog.viewer { width: min(1100px, calc(100vw - 32px)); }
   .proposal-body, .card-block.answered.proposal { grid-template-columns: 1fr; }
   .card-block.answered.proposal .proposal-side { grid-row: auto; grid-column: auto; }
 }
+
+/* --- testability warnings --------------------------------------------- */
+
+.issues { list-style: none; margin: 4px 0 0; padding: 0; font-size: 0.8rem; color: var(--warn); }
+.issue-words { font-weight: 600; }
+.line-issues:empty { display: none; }
+.line-issues .issues { margin: 2px 0 4px; }
+.warn-count { color: var(--warn); font-weight: 700; }
+.criterion:has(.issues) { border-color: var(--warn); }

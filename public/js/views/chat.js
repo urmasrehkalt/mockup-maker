@@ -3,7 +3,9 @@
 
 import { h } from "../dom.js";
 import { t } from "../i18n.js";
+import { api } from "../api.js";
 import { renderTree } from "../mockup/render.js";
+import { issueList } from "../ui.js";
 import { openMockupViewer } from "../mockup/viewer.js";
 
 // Resume actions (from the server) that move the process to a step.
@@ -270,7 +272,7 @@ function proposalCard(message, live, send, state) {
   }
 
   // Each row: { index, text, state: pending | accepted | edited | rejected }
-  const rows = p.criteria.map((c, index) => ({ index, text: c.text, component: c.component_id, state: "pending" }));
+  const rows = p.criteria.map((c, index) => ({ index, text: c.text, component: c.component_id, state: "pending", issues: c.issues ?? [] }));
   const list = h("ol", { class: "criteria-review" });
 
   const drawRows = () => {
@@ -302,10 +304,11 @@ function criterionRow(row, redraw, highlight, drop) {
   const editing = row.state === "editing";
   const input = h("input", { type: "text", maxlength: 300, "aria-label": t("chat.criterion_text") });
   input.value = row.text;
-  const done = () => {
+  const done = async () => {
     row.text = input.value.trim();
     if (!row.text && row.index === null) { drop(); return; }
     row.state = row.index === null ? "edited" : (row.text === row.original ? "accepted" : "edited");
+    row.issues = await api.checkCriteria([row.text]).then((r) => r[0]).catch(() => []);
     redraw();
   };
   const item = h("li", { class: `criterion ${row.state}`, onmouseenter: () => highlight(true), onmouseleave: () => highlight(false) },
@@ -314,7 +317,8 @@ function criterionRow(row, redraw, highlight, drop) {
         h("button", { type: "submit", class: "small primary" }, t("chat.save_criterion")))
       : h("span", { class: "criterion-text" }, row.text,
         row.index === null ? h("span", { class: "hint" }, ` (${t("chat.added")})`) : null,
-        row.state === "edited" && row.index !== null ? h("span", { class: "hint" }, ` (${t("chat.edited")})`) : null),
+        row.state === "edited" && row.index !== null ? h("span", { class: "hint" }, ` (${t("chat.edited")})`) : null,
+        row.state === "rejected" ? null : issueList(row.issues)),
     editing ? null : h("span", { class: "criterion-actions" },
       row.state === "rejected"
         ? h("button", { type: "button", class: "small", onclick: () => { row.state = "pending"; redraw(); } }, t("chat.restore"))

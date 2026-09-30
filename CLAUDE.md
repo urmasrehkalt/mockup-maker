@@ -25,6 +25,8 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
 - `app/mockups.py` + `app/mockup_templates.py`: mockups are a component tree (one node shape,
   per-type rules in `check_tree`), stored as versions, linked to stories. Never HTML: the browser
   renders trees in `public/js/mockup/render.js` via `h()` with `data-component-id` on every element
+- `app/testability.py`: the one rule-based criteria check (evaluative / multiple / vague, ET+EN);
+  the frontend never re-implements it, it calls `POST /api/criteria/check`
 - `app/ai/`: AI layer. `providers.py` runs `codex exec` on a ChatGPT subscription (ported
   from acupoint) or `mock`/`off`; `schema.py` turns a Pydantic model into a strict
   `--output-schema`; `tasks.py` `run_task()` validates every answer and retries once.
