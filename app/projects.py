@@ -51,6 +51,7 @@ class Project(BaseModel):
     name: str
     description: str
     step: Step
+    current_story_id: int | None = None
     created_at: str
     updated_at: str
 

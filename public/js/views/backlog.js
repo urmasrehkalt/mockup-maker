@@ -40,11 +40,12 @@ export function backlogPanel(state, reload) {
     undoLabel ? h("p", { class: "hint undo-hint" }, t("backlog.undo_what", { what: undoLabel })) : null,
     status,
     stories.length
-      ? h("ol", { class: "story-list" }, stories.map((story, i) => storyRow(story, i, stories, move, edit)))
+      ? h("ol", { class: "story-list" }, stories.map((story, i) =>
+        storyRow(story, i, stories, move, edit, story.id === project.current_story_id)))
       : h("p", { class: "muted" }, t("backlog.empty")));
 }
 
-function storyRow(story, index, stories, move, edit) {
+function storyRow(story, index, stories, move, edit, current) {
   const ids = stories.map((s) => s.id);
   const shifted = (to) => {
     const next = ids.filter((id) => id !== story.id);
@@ -52,12 +53,13 @@ function storyRow(story, index, stories, move, edit) {
     return next;
   };
 
-  const row = h("li", { class: "story-row", draggable: "true", dataset: { id: story.id } },
+  const row = h("li", { class: `story-row ${current ? "current" : ""}`, draggable: "true", dataset: { id: story.id } },
     h("span", { class: "drag-handle", "aria-hidden": "true", title: t("backlog.drag") }, "⋮⋮"),
     h("button", { type: "button", class: "story-open", onclick: () => edit(story),
       "aria-label": t("backlog.edit_story", { key: story.key }) },
       h("span", { class: "story-meta" },
         h("span", { class: "story-key" }, story.key),
+        current ? h("span", { class: "current-tag" }, t("backlog.current")) : null,
         h("span", { class: `status status-${story.status}` }, t(`status.${story.status}`)),
         story.size ? h("span", { class: "size" }, story.size) : null,
         story.criteria.length ? h("span", { class: "muted" }, t("backlog.criteria_count", { count: story.criteria.length })) : null,

@@ -43,7 +43,7 @@ function author(role) {
 function userMessage(message) {
   const input = message.content.input ?? {};
   // Answers, role choices and added stories are shown on the card they answer.
-  if (["answer", "roles", "stories"].includes(input.kind)) return null;
+  if (["answer", "roles", "stories", "focus"].includes(input.kind)) return null;
   let text;
   switch (input.kind) {
     case "text": text = input.text; break;
@@ -61,6 +61,7 @@ function assistantMessage(message, live, send, state) {
     c.question ? questionCard(message, live, send) : null,
     c.roles ? rolesCard(message, live, send, state) : null,
     c.stories ? storiesCard(message, live, send) : null,
+    c.priority ? priorityCard(message, live, send, state) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
 }
 
@@ -203,6 +204,42 @@ function storiesCard(message, live, send) {
       h("button", { type: "button", class: "primary", onclick: () =>
         send({ kind: "stories", message_id: message.id, selected: c.stories.map((_, i) => i) }) },
         t("chat.add_all"))));
+}
+
+// --- priority ------------------------------------------------------------
+
+function priorityCard(message, live, send, state) {
+  const card = message.content.priority;
+  const byKey = new Map(state.stories.map((s) => [s.key, s]));
+  const recommended = byKey.get(card.story_key);
+  const summary = (key) => {
+    const story = byKey.get(key);
+    return story ? `${key}: ${story.title}` : key;
+  };
+
+  if (card.chosen || !live || !recommended) {
+    return h("div", { class: "card-block answered" },
+      h("div", { class: "card-title" }, t("chat.priority_title")),
+      h("p", { class: "muted" }, card.chosen
+        ? t(card.chosen.agreed ? "chat.priority_agreed" : "chat.priority_other", { story: summary(card.chosen.key) })
+        : t("chat.priority_recommended", { story: summary(card.story_key) })));
+  }
+
+  const focus = (story) => send({ kind: "focus", message_id: message.id, story_id: story.id });
+  const others = h("div", { class: "choice-list", hidden: true },
+    h("p", { class: "hint" }, t("chat.priority_pick")),
+    state.stories.filter((s) => s.key !== card.story_key).map((story) =>
+      h("button", { type: "button", class: "choice story-choice", onclick: () => focus(story) },
+        h("span", { class: "story-key" }, story.key), " ", story.title)));
+
+  return h("div", { class: "card-block recommendation" },
+    h("div", { class: "card-title" }, t("chat.priority_title")),
+    h("p", { class: "recommended-story" }, h("span", { class: "story-key" }, recommended.key), " ", recommended.title),
+    h("p", { class: "reason" }, h("strong", {}, t("chat.priority_why")), " ", card.reason),
+    h("div", { class: "card-actions" },
+      h("button", { type: "button", onclick: () => { others.hidden = !others.hidden; } }, t("chat.priority_choose_other")),
+      h("button", { type: "button", class: "primary", onclick: () => focus(recommended) }, t("chat.priority_agree"))),
+    others);
 }
 
 // --- next steps, resume, errors, composer --------------------------------

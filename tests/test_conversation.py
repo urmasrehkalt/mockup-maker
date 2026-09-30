@@ -251,7 +251,8 @@ def test_check_turn_rules():
             "next_steps": [{"label": "Edasi", "kind": "reply", "step": None}]}
     asking = conversation.Turn.model_validate(base)
     silent = conversation.Turn.model_validate({**base, "question": None})
-    first = {"step": "idea", "user_input": {"kind": "text"}, "clarifications_asked": 0}
+    first = {"step": "idea", "user_input": {"kind": "text"}, "clarifications_asked": 0,
+             "backlog": [], "roles": []}
     assert conversation.check_turn(asking, first) is None
     assert "clarifying question" in conversation.check_turn(silent, first)
     assert conversation.check_turn(silent, {**first, "user_input": {"kind": "next"}}) is None

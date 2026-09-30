@@ -324,6 +324,15 @@ button.danger { color: var(--error); border-color: currentColor; margin-right: a
 .story-key { font-weight: 700; }
 .story-title { display: block; margin: 0; font-size: 0.9rem; }
 .open-q { color: var(--warn); font-weight: 700; }
+.story-row.current { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.current-tag { padding: 1px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-weight: 700; }
+
+.recommendation { border-color: var(--accent); }
+.recommended-story { font-weight: 600; margin: 6px 0; }
+.reason { margin: 0; }
+.choice-list { display: grid; gap: 6px; margin-top: 10px; }
+.choice-list[hidden] { display: none; }
+.story-choice { text-align: left; }
 .row-moves { display: flex; flex-direction: column; gap: 2px; opacity: 0; }
 .story-row:hover .row-moves, .row-moves:focus-within { opacity: 1; }
 .row-moves button { font-size: 0.75rem; padding: 0 6px; }

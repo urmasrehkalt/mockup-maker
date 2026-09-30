@@ -94,6 +94,11 @@ MIGRATIONS: list[str] = [
     UPDATE projects SET story_seq =
         (SELECT COALESCE(MAX(number), 0) FROM stories WHERE stories.project_id = projects.id);
     """,
+    # 5: the story the process is working on (chosen in the priorities step)
+    """
+    ALTER TABLE projects ADD COLUMN current_story_id INTEGER
+        REFERENCES stories(id) ON DELETE SET NULL;
+    """,
 ]
 
 
