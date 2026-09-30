@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import backlog, config, conversation, db, mockups, projects, testability
+from . import backlog, config, conversation, db, mockups, projects, review, testability
 from .ai import AIError
 
 # How each AI failure reaches the client: disabled and unavailable are the
@@ -48,5 +48,6 @@ app.include_router(conversation.router)
 app.include_router(backlog.router)
 app.include_router(mockups.router)
 app.include_router(testability.router)
+app.include_router(review.router)
 
 app.mount("/", StaticFiles(directory=PUBLIC_DIR, html=True), name="public")

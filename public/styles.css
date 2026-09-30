@@ -609,3 +609,31 @@ table.assign select { width: 100%; }
 .keep-choice { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
 dialog.grooming select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font: inherit; color: inherit; }
 @media (max-width: 640px) { .connextra-row { grid-template-columns: 1fr; } }
+
+/* --- backlog review --------------------------------------------------- */
+
+.backlog-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.backlog-foot .add-mvp { margin-top: 0; }
+.review-button { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.message.assistant:has(.review) { max-width: 100%; }
+.findings { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.finding { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.finding.applied { border-color: var(--ok); }
+.finding.ignored { opacity: 0.7; }
+.finding-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; }
+.finding-problem { font-weight: 600; margin: 0 0 2px; }
+.finding-proposal { margin-top: 8px; }
+.kind { padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: #fff4d6; color: #7a5200; }
+.kind-overlap, .kind-too_large { background: #e3ecff; color: #1f4fbf; }
+.decided { margin-left: auto; font-size: 0.8rem; font-weight: 700; }
+.decided.applied { color: var(--ok); }
+.decided.ignored { color: var(--muted); }
+.split-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.proposal-list { margin: 4px 0 0; padding-left: 18px; }
+.proposal-list.dropped li { text-decoration: line-through; color: var(--muted); }
+.removed-title { text-decoration: line-through; color: var(--muted); margin: 0; }
+.finding textarea { width: 100%; }
+@media (prefers-color-scheme: dark) {
+  .kind { background: #3b2f10; color: #f0c45b; }
+  .kind-overlap, .kind-too_large { background: #172a4d; color: #8fb3ff; }
+}

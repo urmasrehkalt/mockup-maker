@@ -387,6 +387,8 @@ def describe(message: projects.Message) -> str:
                      f"for {content['proposal']['story_key']}]")
         if content.get("change"):
             line += f" [proposed a change to {content['change']['story_key']}]"
+        if content.get("review"):
+            line += f" [reviewed the backlog: {len(content['review']['findings'])} findings]"
         return line
     data = content.get("input", {})
     match data.get("kind"):
@@ -408,6 +410,8 @@ def describe(message: projects.Message) -> str:
             return "Applied the change" if data["decision"] == "apply" else "Discarded the change"
         case "refine":
             return f"Asked for a separate change: {data['text']}"
+        case "review":
+            return "Asked for a backlog review"
         case "next":
             return f"Chose: {data['label']}"
         case _:

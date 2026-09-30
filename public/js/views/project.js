@@ -40,14 +40,17 @@ class ProjectPage {
     if (this.pending) return;
     this.pending = true;
     const step = this.state.project.step;
-    this.slow = input.kind === "focus" || input.kind === "refine"
+    this.slow = input.kind === "review" ? "review" : input.kind === "focus" || input.kind === "refine"
       || (input.kind === "next" && input.step === "criteria")
       || (input.kind === "text" && step === "refinements" && this.state.project.current_story_id);
     this.error = null;
-    if (input.kind !== "retry") this.optimistic(input);
+    if (!["retry", "finding"].includes(input.kind)) this.optimistic(input);
     this.draw();
     try {
-      this.state = await api.turn(this.state.project.id, input);
+      const id = this.state.project.id;
+      this.state = input.kind === "review" ? await api.review(id)
+        : input.kind === "finding" ? await api.decideFinding(id, input.message_id, input.index, input.data)
+          : await api.turn(id, input);
     } catch (error) {
       this.error = errorText(error);
       // The server keeps the user's decision even when the AI fails; show it.
@@ -92,7 +95,7 @@ class ProjectPage {
       h("div", { class: "workspace" },
         conversation(this.state, (input) => this.send(input),
           { pending: this.pending, error: this.error, slow: this.slow }),
-        backlogPanel(this.state, () => this.reload())));
+        backlogPanel(this.state, () => this.reload(), () => this.send({ kind: "review" }))));
     this.view.querySelector(".step.current")?.scrollIntoView({ block: "nearest", inline: "center" });
     const end = this.view.querySelector(".composer");
     if (this.state.messages.length) end?.scrollIntoView({ block: "end" });

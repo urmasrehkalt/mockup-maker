@@ -40,6 +40,8 @@ export const api = {
   reorderStories: (id, ids, line = {}) => request("PUT", `/api/projects/${id}/stories/order`, { ids, ...line }),
   splitStory: (id, storyId, data) => request("POST", `/api/projects/${id}/stories/${storyId}/split`, data),
   mergeStories: (id, data) => request("POST", `/api/projects/${id}/stories/merge`, data),
+  review: (id) => request("POST", `/api/projects/${id}/review`),
+  decideFinding: (id, messageId, index, data) => request("POST", `/api/projects/${id}/review/${messageId}/findings/${index}`, data),
   undo: (id) => request("POST", `/api/projects/${id}/undo`),
   templates: () => request("GET", "/api/mockup-templates"),
   checkCriteria: (texts) => request("POST", "/api/criteria/check", { texts }),

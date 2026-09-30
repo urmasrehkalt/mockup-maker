@@ -17,7 +17,7 @@ const MVP = "mvp";
  * @param state   project state
  * @param reload  async () => state, reloads the project state and redraws
  */
-export function backlogPanel(state, reload) {
+export function backlogPanel(state, reload, review) {
   const { stories, undo, project } = state;
   const status = h("div", { class: "form-status", role: "status" });
 
@@ -68,8 +68,10 @@ export function backlogPanel(state, reload) {
         return row;
       }))
       : h("p", { class: "muted" }, t("backlog.empty")),
-    stories.length && !hasLine ? h("button", { type: "button", class: "small add-mvp",
-      onclick: () => commit(moved(MVP, Math.min(3, stories.length))) }, `+ ${t("backlog.add_mvp")}`) : null);
+    stories.length ? h("div", { class: "backlog-foot" },
+      h("button", { type: "button", class: "small review-button", onclick: review }, `✦ ${t("review.button")}`),
+      hasLine ? null : h("button", { type: "button", class: "small add-mvp",
+        onclick: () => commit(moved(MVP, Math.min(3, stories.length))) }, `+ ${t("backlog.add_mvp")}`)) : null);
 }
 
 const warned = (story) => story.criteria.filter((c) => c.issues.length).length;

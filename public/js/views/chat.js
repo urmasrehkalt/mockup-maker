@@ -6,6 +6,10 @@ import { t } from "../i18n.js";
 import { api } from "../api.js";
 import { renderTree } from "../mockup/render.js";
 import { issueList } from "../ui.js";
+import { reviewCard } from "./review.js";
+
+let templates = [];
+api.templates().then((list) => { templates = list; }).catch(() => {});
 import { openMockupViewer } from "../mockup/viewer.js";
 
 // Resume actions (from the server) that move the process to a step.
@@ -35,8 +39,8 @@ export function conversation(state, send, { pending = false, error = null, slow 
   return h("section", { class: `conversation card ${pending ? "busy" : ""}`, "aria-live": "polite" },
     messages.map((m) => (m.role === "user" ? userMessage(m) : assistantMessage(m, m === live, send, state))),
     pending ? h("div", { class: "message assistant thinking" }, author("assistant"),
-      h("p", {}, t(slow ? "chat.thinking_mockup" : "chat.thinking"))) : null,
-    error ? errorCard(error, send) : null,
+      h("p", {}, t(slow === "review" ? "review.thinking" : slow ? "chat.thinking_mockup" : "chat.thinking"))) : null,
+    error ? errorCard(error, send, state) : null,
     !pending && !error ? resumeCard(state, last, lastAssistant, send) : null,
     composer(state, send, pending));
 }
@@ -54,6 +58,7 @@ function userMessage(message) {
     case "text": text = input.text; break;
     case "next": text = input.label; break;
     case "refine": text = t("chat.refine_other", { text: input.text }); break;
+    case "review": text = t("review.request"); break;
     default: text = message.content.text ?? "";
   }
   return h("div", { class: "message user" }, author("user"), h("p", {}, text));
@@ -70,6 +75,7 @@ function assistantMessage(message, live, send, state) {
     c.priority ? priorityCard(message, live, send, state) : null,
     c.proposal ? proposalCard(message, live, send, state) : null,
     c.change ? changeCard(message, live, send, state) : null,
+    c.review ? reviewCard(message, send, templates) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
 }
 
@@ -458,7 +464,8 @@ function nextSteps(steps, send) {
     type: "button",
     class: i === 0 ? "choice primary" : "choice",
     onclick: () => (step.kind === "end_meeting" ? endMeeting()
-      : send({ kind: "next", label: step.label, step: step.step })),
+      : step.step === "grooming" ? send({ kind: "review" })
+        : send({ kind: "next", label: step.label, step: step.step })),
   }, step.label)));
 }
 
@@ -474,7 +481,7 @@ function resumeCard(state, last, lastAssistant, send) {
   if (last && last === lastAssistant && lastAssistant.content.step === project.step) return null;
   if (last && last.role === "user") {
     // The AI never answered this input (it failed earlier): offer to ask again.
-    return errorCard(t("chat.no_answer"), send);
+    return errorCard(t("chat.no_answer"), send, state);
   }
 
   return h("div", { class: "message assistant" },
@@ -484,14 +491,18 @@ function resumeCard(state, last, lastAssistant, send) {
       type: "button",
       class: i === 0 ? "choice primary" : "choice",
       onclick: () => (action === "end_meeting" ? endMeeting()
-        : send({ kind: "next", label: t(`action.${action}`), step: ACTION_STEP[action] ?? null })),
+        : action === "review_backlog" ? send({ kind: "review" })
+          : send({ kind: "next", label: t(`action.${action}`), step: ACTION_STEP[action] ?? null })),
     }, t(`action.${action}`)))));
 }
 
-function errorCard(error, send) {
+function errorCard(error, send, state) {
+  // A failed review is retried as a review, anything else as a conversation turn.
+  const last = state?.messages.at(-1);
+  const again = last?.role === "user" && last.content.input?.kind === "review" ? { kind: "review" } : { kind: "retry" };
   return h("div", { class: "notice error", role: "alert" },
     h("p", {}, error),
-    h("button", { type: "button", onclick: () => send({ kind: "retry" }) }, t("chat.retry")));
+    h("button", { type: "button", onclick: () => send(again) }, t("chat.retry")));
 }
 
 function composer(state, send, pending) {
