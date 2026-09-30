@@ -40,7 +40,7 @@ class ProjectPage {
     if (this.pending) return;
     this.pending = true;
     const step = this.state.project.step;
-    this.slow = input.kind === "review" ? "review" : input.kind === "focus" || input.kind === "refine"
+    this.slow = input.kind === "review" ? "review" : input.kind === "focus" || input.kind === "refine" || input.kind === "new_view"
       || (input.kind === "next" && input.step === "criteria")
       || (input.kind === "text" && step === "refinements" && this.state.project.current_story_id);
     this.error = null;
@@ -95,7 +95,8 @@ class ProjectPage {
       h("div", { class: "workspace" },
         conversation(this.state, (input) => this.send(input),
           { pending: this.pending, error: this.error, slow: this.slow }),
-        backlogPanel(this.state, () => this.reload(), () => this.send({ kind: "review" }))));
+        backlogPanel(this.state, () => this.reload(), () => this.send({ kind: "review" }),
+          (input) => this.send(input))));
     this.view.querySelector(".step.current")?.scrollIntoView({ block: "nearest", inline: "center" });
     const end = this.view.querySelector(".composer");
     if (this.state.messages.length) end?.scrollIntoView({ block: "end" });

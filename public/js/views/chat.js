@@ -65,13 +65,14 @@ function author(role) {
 function userMessage(message) {
   const input = message.content.input ?? {};
   // Answers, role choices and added stories are shown on the card they answer.
-  if (["answer", "roles", "stories", "focus", "criteria", "change"].includes(input.kind)) return null;
+  if (["answer", "roles", "stories", "focus", "criteria", "change", "view_add"].includes(input.kind)) return null;
   let text;
   switch (input.kind) {
     case "text": text = input.text; break;
     case "next": text = input.label; break;
     case "refine": text = t("chat.refine_other", { text: input.text }); break;
     case "review": text = t("review.request"); break;
+    case "new_view": text = t("newview.request", { text: input.text }); break;
     default: text = message.content.text ?? "";
   }
   return h("div", { class: "message user" }, author("user"), h("p", {}, text));
@@ -89,6 +90,7 @@ function assistantMessage(message, live, send, state) {
     c.proposal ? proposalCard(message, live, send, state) : null,
     c.change ? changeCard(message, live, send, state) : null,
     c.review ? reviewCard(message, send, templates, contentLanguage) : null,
+    c.new_view ? newViewCard(message, live, send, state) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
 }
 
@@ -353,6 +355,77 @@ function criterionRow(row, redraw, highlight, drop) {
         ]));
   if (editing) setTimeout(() => input.focus(), 0);
   return item;
+}
+
+// --- a new view described in words ------------------------------------------
+
+function newViewCard(message, live, send, state) {
+  const v = message.content.new_view;
+  const heading = h("div", { class: "card-title" }, t("newview.card_title"));
+  if (v.decided || !live) {
+    return h("div", { class: "card-block answered" }, heading,
+      h("p", { class: "muted" }, !v.decided ? t("newview.not_decided")
+        : v.decided.added ? t("newview.added", { key: v.decided.key }) : t("newview.discarded")));
+  }
+
+  const preview = h("div", { class: "proposal-mockup" }, renderTree(v.mockup));
+  const highlight = (id, on) => {
+    if (!id) return;
+    preview.querySelectorAll(`[data-component-id="${CSS.escape(id)}"]`).forEach((el) => el.classList.toggle("wf-highlight", on));
+  };
+
+  // The story wording, editable before adding.
+  const wording = { role_phrase: v.story.role_phrase, action: v.story.action, benefit: v.story.benefit };
+  const title = h("p", { class: "title-preview" });
+  const showTitle = () => { title.textContent = composeTitle(wording, contentLanguage); };
+  const fields = ["role_phrase", "action", "benefit"].map((name) => {
+    const input = h("input", { type: "text", maxlength: name === "role_phrase" ? 80 : 300,
+      "aria-label": contentText(contentLanguage, name === "role_phrase" ? "phrase" : name) });
+    input.value = wording[name];
+    input.addEventListener("input", () => { wording[name] = input.value; showTitle(); });
+    return input;
+  });
+  showTitle();
+
+  const rows = v.criteria.map((c, index) => ({ index, text: c.text, component: c.component_id, state: "pending", issues: c.issues ?? [] }));
+  const list = h("ol", { class: "criteria-review" });
+  const drawRows = () => {
+    list.replaceChildren(...rows.map((row, i) => criterionRow(row, () => drawRows(), (on) => highlight(row.component, on), () => {
+      rows.splice(i, 1); drawRows();
+    })));
+  };
+  drawRows();
+
+  const add = () => {
+    const edited = ["role_phrase", "action", "benefit"].some((k) => wording[k].trim() !== v.story[k]);
+    send({ kind: "view_add", message_id: message.id, decision: "add",
+      wording: edited ? Object.fromEntries(Object.entries(wording).map(([k, x]) => [k, x.trim()])) : null,
+      items: rows.filter((row) => row.state !== "rejected" && row.text.trim())
+        .map((row) => (row.index === null ? { index: null, text: row.text }
+          : row.state === "edited" ? { index: row.index, text: row.text } : { index: row.index })) });
+  };
+  const open = () => openMockupViewer({ title: v.mockup.title, version: "·", tree: v.mockup });
+
+  return h("div", { class: "card-block proposal new-view-card" },
+    heading,
+    h("div", { class: "change-section" },
+      h("h4", {}, t("chat.change_wording"),
+        v.new_role ? h("span", { class: "new-role" }, t("newview.new_role", { role: v.new_role.name })) : null),
+      h("div", { class: "connextra-row" }, fields[0], h("span", {}, contentText(contentLanguage, "want")),
+        fields[1], h("span", {}, contentText(contentLanguage, "soThat")), fields[2]),
+      title),
+    h("div", { class: "proposal-body" },
+      h("div", {}, h("h4", { class: "section-label" }, t("editor.criteria")), list,
+        h("div", { class: "card-actions" },
+          h("button", { type: "button", class: "quiet-button", onclick: () => {
+            rows.push({ index: null, text: "", component: null, state: "editing" }); drawRows();
+          } }, `+ ${t("chat.add_criterion")}`))),
+      h("div", { class: "proposal-side" },
+        h("button", { type: "button", class: "proposal-preview", onclick: open, "aria-label": t("mockup.open", { title: v.mockup.title }) }, preview),
+        h("button", { type: "button", class: "small", onclick: open }, t("chat.open_mockup")))),
+    h("div", { class: "card-actions" },
+      h("button", { type: "button", class: "quiet-button", onclick: () => send({ kind: "view_add", message_id: message.id, decision: "discard" }) }, t("chat.discard")),
+      h("button", { type: "button", class: "primary", onclick: add }, t("newview.add"))));
 }
 
 // --- refinement: change with before/after preview ------------------------

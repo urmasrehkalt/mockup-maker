@@ -723,3 +723,21 @@ dialog.story-map { width: min(1400px, calc(100vw - 24px)); max-height: calc(100v
 
 .backlog.flash { box-shadow: 0 0 0 3px var(--accent); transition: box-shadow 0.2s; }
 #backlog-title:focus { outline: none; }
+
+/* --- new view --------------------------------------------------------- */
+
+.message.assistant:has(.new-view-card) { max-width: 100%; }
+.new-view-card .connextra-row input { min-width: 0; }
+.new-role { margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #fff4d6; color: #7a5200;
+  font-size: 0.72rem; text-transform: none; letter-spacing: 0; }
+.section-label { margin: 10px 0 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+dialog.new-view { width: min(620px, calc(100vw - 32px)); }
+dialog.new-view textarea, dialog.new-view select { width: 100%; }
+dialog.new-view select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font: inherit; color: inherit; }
+
+/* The backlog header has three actions; keep each on one line and let the row wrap. */
+.backlog .panel-head { flex-wrap: wrap; row-gap: 6px; }
+.backlog .panel-actions { flex-wrap: wrap; }
+.backlog .panel-actions button { white-space: nowrap; }
+.backlog .panel-head { margin-bottom: 10px; }
+.backlog .panel-head h2 { margin-bottom: 0; }

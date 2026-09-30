@@ -13,6 +13,7 @@ Kõik ülesande põhifunktsioonid on olemas ja kasutatavad nii ChatGPT tellimuse
 | Backlog: väljad, käsitsi haldus, lohistamine, tagasivõtmine, MVP joon | töötab | #6, #14 |
 | Valmisoleku definitsioon, „Vajab täpsustamist“ koos avatud küsimusega | töötab | #13 |
 | Mockup ja kriteeriumid, kooskõla (kriteerium viitab mockup'i elemendile) | töötab | #8, #9 |
+| Uue vaate kirjeldamine promptiga: mockup, Connextra lugu ja kriteeriumid korraga | töötab | #27 |
 | Kliendi täpsustus eelvaatega, ainult valitud loo muutmine, teised lood eraldi ettepanekutena | töötab | #11 |
 | Mockup'i versioonid ja taastamine | töötab | #12 |
 | Kontrollitavuse reegel (hinnangulised sõnad, mitu tingimust, ebamäärasus) | töötab | #10 |

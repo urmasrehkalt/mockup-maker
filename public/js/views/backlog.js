@@ -10,6 +10,7 @@ import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 import { openStoryEditor } from "./story-editor.js";
+import { openNewViewDialog } from "./new-view.js";
 import { openStoryMap } from "./story-map.js";
 import { openTrackerDialog, trackerStatus } from "./tracker.js";
 
@@ -19,7 +20,7 @@ const MVP = "mvp";
  * @param state   project state
  * @param reload  async () => state, reloads the project state and redraws
  */
-export function backlogPanel(state, reload, review) {
+export function backlogPanel(state, reload, review, send) {
   const { stories, undo, project } = state;
   const status = h("div", { class: "form-status", role: "status" });
 
@@ -57,7 +58,9 @@ export function backlogPanel(state, reload, review) {
         h("button", { type: "button", class: "small", disabled: !undo,
           title: undoLabel ? t("backlog.undo_what", { what: undoLabel }) : t("backlog.undo_nothing"),
           onclick: () => act(() => api.undo(project.id)) }, `↶ ${t("backlog.undo")}`),
-        h("button", { type: "button", class: "small primary", onclick: () => edit(null) }, `+ ${t("backlog.add")}`))),
+        h("button", { type: "button", class: "small primary", onclick: () => edit(null) }, `+ ${t("backlog.add")}`),
+        h("button", { type: "button", class: "small primary", onclick: () => openNewViewDialog(state, send, reload) },
+          `+ ${t("newview.button")}`))),
     undoLabel ? h("p", { class: "hint undo-hint" }, t("backlog.undo_what", { what: undoLabel })) : null,
     status,
     stories.length

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import backlog, db, mockups, projects, testability
 from .ai import Task, run_task
+from .mockup_templates import TEMPLATES, localized
 from .projects import Role, Step
 
 MAX_CLARIFICATIONS = 3
@@ -92,6 +93,19 @@ class Change(_Strict):
         return self
 
 
+class NewRole(_Strict):
+    name: str = Field(min_length=1, max_length=60)
+    description: str = Field(max_length=300)
+
+
+class NewView(_Strict):
+    """A view described in words: its story, criteria and mockup, proposed together."""
+    story: backlog.StoryParts
+    new_role: NewRole | None = None  # only when no confirmed role fits
+    criteria: list[ProposedCriterion] = Field(min_length=3, max_length=8)
+    mockup: mockups.Tree
+
+
 class NextStep(_Strict):
     label: str = Field(min_length=1, max_length=60)
     kind: Literal["reply", "end_meeting"]
@@ -109,11 +123,13 @@ class Turn(_Strict):
     priority: PriorityCard | None = None
     proposal: Proposal | None = None
     change: Change | None = None
+    new_view: NewView | None = None
     next_steps: list[NextStep] = Field(min_length=1, max_length=4)
 
     @model_validator(mode="after")
     def _one_card_and_a_way_on(self):
-        cards = (self.question, self.roles, self.stories, self.priority, self.proposal, self.change)
+        cards = (self.question, self.roles, self.stories, self.priority, self.proposal, self.change,
+                 self.new_view)
         if sum(1 for card in cards if card) > 1:
             raise ValueError("one card per turn: a question, roles, stories, a priority, a "
                              "proposal or a change, not several")
@@ -184,6 +200,15 @@ Rules for this turn:
   `other_stories`. For "refine", the refinement text is
   INPUT.user_input.text. When INPUT.user_input.kind is "change" the user applied or discarded it:
   acknowledge and ask what to do next (next story, backlog review, end the meeting).
+- New view (any step): when INPUT.user_input.kind is "new_view", the user described a view that
+  is not in the backlog yet (INPUT.user_input.text). Return `new_view`: the story for it (fields as
+  for stories above), 3 to 7 criteria following the criteria rules above, and the mockup. If
+  INPUT.template is given, start the mockup from it and keep its ids where they fit; otherwise
+  design it. Use a role from INPUT.roles when one fits; only if none does, set `new_role` (name and
+  a one-line description) and use that name as the story's role_name. Do not repeat a story that
+  is already in INPUT.backlog. When INPUT.user_input.kind is "view_add" the user added or
+  discarded it: acknowledge in one sentence; if added, stay at the refinements step and invite the
+  client's remarks about the new view.
 - Later steps: explain briefly what happens in the step and offer next steps; do not invent
   stories or criteria in the message text.
 - Free text: the user may ignore the buttons and write. If INPUT.open_question is set and the text
@@ -272,12 +297,27 @@ class NextInput(_Strict):
     step: Step | None = None
 
 
+class NewViewInput(_Strict):
+    kind: Literal["new_view"]
+    text: str = Field(min_length=1, max_length=1000)
+    template: str | None = Field(default=None, max_length=40)
+
+
+class ViewAddInput(_Strict):
+    kind: Literal["view_add"]
+    message_id: int
+    decision: Literal["add", "discard"]
+    wording: Wording | None = None       # the user's edit of the story wording
+    items: list[CriteriaItem] = Field(default_factory=list, max_length=15)
+
+
 class RetryInput(_Strict):
     kind: Literal["retry"]
 
 
 UserInput = Annotated[TextInput | AnswerInput | RolesInput | StoriesInput | FocusInput
-                      | CriteriaInput | ChangeInput | RefineInput | NextInput | RetryInput,
+                      | CriteriaInput | ChangeInput | RefineInput | NewViewInput | ViewAddInput
+                      | NextInput | RetryInput,
                       Field(discriminator="kind")]
 
 
@@ -360,6 +400,10 @@ def apply_input(conn: sqlite3.Connection, project_id: int, data: Any) -> project
             apply_criteria(conn, project_id, data)
         elif data.kind == "change":
             apply_change(conn, project_id, data)
+        elif data.kind == "new_view" and data.template and data.template not in TEMPLATE_KEYS:
+            raise HTTPException(422, f"Unknown template {data.template!r}")
+        elif data.kind == "view_add":
+            apply_new_view(conn, project_id, data)
         elif data.kind == "refine":
             story = backlog.get_story(conn, project_id, data.story_id)
             conn.execute("UPDATE projects SET current_story_id = ?, step = 'refinements' WHERE id = ?",
@@ -391,6 +435,8 @@ def describe(message: projects.Message) -> str:
                      f"for {content['proposal']['story_key']}]")
         if content.get("change"):
             line += f" [proposed a change to {content['change']['story_key']}]"
+        if content.get("new_view"):
+            line += f" [proposed a new view: {content['new_view']['story']['action']}]"
         if content.get("review"):
             line += f" [reviewed the backlog: {len(content['review']['findings'])} findings]"
         return line
@@ -412,6 +458,10 @@ def describe(message: projects.Message) -> str:
             return f"Decided on the proposal: kept {len(data['items'])} criteria and the mockup"
         case "change":
             return "Applied the change" if data["decision"] == "apply" else "Discarded the change"
+        case "new_view":
+            return f"Described a new view: {data['text']}"
+        case "view_add":
+            return "Added the new view to the backlog" if data["decision"] == "add" else "Discarded the new view"
         case "refine":
             return f"Asked for a separate change: {data['text']}"
         case "review":
@@ -444,6 +494,9 @@ def build_payload(conn: sqlite3.Connection, project_id: int, data: Any,
         "recent_messages": [{"role": m.role, "text": describe(m)}
                             for m in history[-RECENT_MESSAGES:]],
         "user_input": data.model_dump(),
+        # a new view's chosen starting template, in the project's language
+        "template": (localized(data.template, project.language)[1]
+                     if data.kind == "new_view" and data.template else None),
     }
 
 
@@ -463,7 +516,18 @@ def mock_turn(payload: dict[str, Any]) -> dict[str, Any]:
     data = payload["user_input"]
     reply = lambda label, step=None: {"label": label, "kind": "reply", "step": step}  # noqa: E731
     base = {"interpreted_answer": None, "noted_fact": None, "question": None, "roles": None,
-            "stories": None, "priority": None, "proposal": None, "change": None}
+            "stories": None, "priority": None, "proposal": None, "change": None, "new_view": None}
+    if data["kind"] == "new_view":
+        return {**base, "step": payload["step"], "message": "Pakun uue vaate koos loo ja kriteeriumidega.",
+                "new_view": mock_new_view(payload),
+                "next_steps": [reply("Kirjelda teistsugune vaade", payload["step"])]}
+    if data["kind"] == "view_add":
+        added = data["decision"] == "add"
+        return {**base, "step": "refinements" if added else payload["step"],
+                "message": "Uus vaade on backlog'is. Kui kliendil on märkusi, kirjuta need siia." if added
+                           else "Uuest vaatest loobuti.",
+                "next_steps": [reply("Järgmine lugu", "priorities"),
+                               {"label": "Lõpetame kohtumise", "kind": "end_meeting", "step": None}]}
     answered = len(payload["clarifications"])
     if payload["open_question"] and data["kind"] == "text":
         base["interpreted_answer"] = data["text"][:300]
@@ -568,6 +632,12 @@ def check_turn(turn: Turn, payload: dict[str, Any]) -> str | None:
         problem = _check_proposal(turn.proposal, payload)
         if problem:
             return problem
+    if payload["user_input"]["kind"] == "new_view" and not turn.new_view:
+        return "The user described a new view: return it in `new_view` in this same turn."
+    if turn.new_view:
+        problem = _check_new_view(turn.new_view, payload)
+        if problem:
+            return problem
     if turn.change:
         problem = _check_change(turn.change, payload)
         if problem:
@@ -635,6 +705,108 @@ def _with_issues(proposal: Proposal) -> dict[str, Any]:
     for criterion in data["criteria"]:
         criterion["issues"] = [i.model_dump() for i in testability.check(criterion["text"])]
     return data
+
+
+TEMPLATE_KEYS = set(TEMPLATES)
+
+
+def _check_new_view(view: NewView, payload: dict[str, Any]) -> str | None:
+    roles = {r["name"].casefold(): r["name"] for r in payload["roles"]}
+    role = view.story.role_name.casefold()
+    if view.new_role:
+        if view.new_role.name.casefold() in roles:
+            return (f"{view.new_role.name!r} is already a role; use it and leave new_role null.")
+        if view.new_role.name.casefold() != role:
+            return "The story's role_name must be the proposed new_role's name."
+    elif roles and role not in roles:
+        return (f"Role {view.story.role_name!r} is not in INPUT.roles; use one of {sorted(roles.values())} "
+                "or propose it as new_role.")
+    ids = mockups.component_ids(view.mockup)
+    dangling = [c.component_id for c in view.criteria if c.component_id and c.component_id not in ids]
+    if dangling:
+        return f"Criteria refer to components that are not in the mockup: {dangling}. Use ids from {sorted(ids)}."
+    if not any(c.component_id for c in view.criteria):
+        return "No criterion refers to the mockup: set component_id on criteria about what the view shows."
+    untestable = [testability.describe(c.text, issues) for c in view.criteria
+                  if (issues := testability.check(c.text))]
+    if untestable:
+        return ("Some criteria cannot be answered with yes or no: " + " | ".join(untestable)
+                + ". Rewrite each as one simple, checkable condition.")
+    return None
+
+
+def _stored_new_view(view: NewView) -> dict[str, Any]:
+    data = view.model_dump()
+    for criterion in data["criteria"]:
+        criterion["issues"] = [i.model_dump() for i in testability.check(criterion["text"])]
+    return data
+
+
+def apply_new_view(conn: sqlite3.Connection, project_id: int, data: ViewAddInput) -> None:
+    """Add (or discard) a new-view card: story, criteria and mockup together, then make the
+    story the current one. Called inside the input's transaction; one undo removes it all."""
+    message = projects.get_message(conn, project_id, data.message_id)
+    view = message.content.get("new_view") if message.role == "assistant" else None
+    if not view:
+        raise HTTPException(400, "That message has no new view to decide on")
+    if "decided" in view:
+        raise HTTPException(409, "That new view was already decided on")
+    if data.decision == "discard":
+        view["decided"] = {"added": False}
+        projects.update_message(conn, message.id, message.content)
+        return
+
+    offered = view["criteria"]
+    indexes = [item.index for item in data.items if item.index is not None]
+    if len(set(indexes)) != len(indexes) or not all(0 <= i < len(offered) for i in indexes):
+        raise HTTPException(422, "Criteria must refer to distinct proposed criteria")
+    kept: list[tuple[str, backlog.Origin, str | None]] = []
+    for item in data.items:
+        written = " ".join((item.text or "").split())
+        if item.index is None:
+            if not written:
+                raise HTTPException(422, "An added criterion needs text")
+            kept.append((written, "manual", None))
+        else:
+            original = offered[item.index]
+            edited = written and written != original["text"]
+            kept.append((written if edited else original["text"], "manual" if edited else "ai",
+                         original["component_id"]))
+
+    parts = dict(view["story"])
+    if data.wording:
+        parts.update(data.wording.model_dump())
+    backlog.record_undo(conn, project_id, "view_added", title=parts["action"][:60])
+    story = backlog.add_stories(conn, project_id, [backlog.StoryParts(**parts)], origin="ai")[0]
+    backlog.append_criteria(conn, story.id, kept)
+    mockup = mockups.create(conn, project_id, mockups.Tree(**view["mockup"]), note=f"new_view:{message.id}",
+                            story_id=story.id)
+    if view.get("new_role"):
+        current = projects.roles(conn, project_id)
+        if view["new_role"]["name"].casefold() not in {r.name.casefold() for r in current}:
+            projects.replace_roles(conn, project_id, [*current, projects.Role(**view["new_role"])])
+    conn.execute("UPDATE projects SET current_story_id = ?, step = 'refinements' WHERE id = ?",
+                 (story.id, project_id))
+    view["decided"] = {"added": True, "key": story.key, "mockup_id": mockup.id}
+    projects.update_message(conn, message.id, message.content)
+
+
+def mock_new_view(payload: dict[str, Any]) -> dict[str, Any]:
+    """A stand-in new view: the chosen template (or the detail page) with three criteria on it."""
+    data = payload["user_input"]
+    template = data.get("template") or "detail"
+    tree = payload.get("template") or localized(template, payload["language"])[1]
+    ids = sorted(mockups.component_ids(mockups.Tree(**tree)))
+    role = (payload["roles"] or [{"name": "Külastaja"}])[0]["name"]
+    heading = next((i for i in ids if "title" in i or "heading" in i), ids[0])
+    return {"story": {"role_name": role, "role_phrase": f"{role}na",
+                      "action": f"kasutada vaadet: {data['text'][:80].rstrip('.')}",
+                      "benefit": "saaksin vajaliku teabe ühest kohast"},
+            "new_role": None,
+            "criteria": [{"text": "Vaates on pealkiri.", "component_id": heading},
+                         {"text": "Vaates on põhitegevuse nupp.", "component_id": None},
+                         {"text": "Vaade on avatav menüüst.", "component_id": None}],
+            "mockup": tree}
 
 
 def _check_change(change: Change, payload: dict[str, Any]) -> str | None:
@@ -873,6 +1045,7 @@ async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> pro
         "priority": turn.priority.model_dump() if turn.priority else None,
         "proposal": _with_issues(turn.proposal) if turn.proposal else None,
         "change": _stored_change(conn, project_id, turn.change) if turn.change else None,
+        "new_view": _stored_new_view(turn.new_view) if turn.new_view else None,
         "next_steps": [s.model_dump() for s in turn.next_steps],
     })
     return projects.state(conn, project_id)
