@@ -4,14 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mockup Maker</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="#/">Mockup Maker</a>
-    <div class="header-tools">
-      <span id="ai-status" class="pill" aria-live="polite"></span>
-      <button type="button" id="lang-switch" class="small"></button>
+    <div class="app-header-inner">
+      <a class="brand" href="#/">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <rect class="mark-bg" width="32" height="32" rx="8"/>
+        <rect class="mark-line" x="5" y="10.5" width="17.5" height="15.5" rx="2.5"/>
+        <path class="mark-line" d="M5 15h17.5"/>
+        <rect class="mark-fg" x="8" y="17.8" width="8" height="2" rx="1"/>
+        <rect class="mark-fg" x="8" y="21.6" width="5" height="2" rx="1"/>
+        <rect class="mark-fg" x="14.5" y="21.6" width="5" height="2" rx="1"/>
+        <path class="mark-fg" d="M25.5 3.5l1 2.5 2.5 1-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1z"/>
+        </svg>
+        <span>Mockup Maker</span>
+      </a>
+      <div class="header-tools">
+        <span id="ai-status" class="pill" aria-live="polite"></span>
+        <button type="button" id="lang-switch" class="small"></button>
+      </div>
     </div>
   </header>
   <main id="view" class="app-main"></main>

@@ -13,6 +13,7 @@
   --error: #c62828;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  --page-width: 1120px;  /* the header and every page share it, so their edges line up */
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
   color-scheme: light;
@@ -49,16 +50,25 @@ p { margin: 0 0 8px; }
 /* --- shell ------------------------------------------------------------ */
 
 .app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
-.brand { font-weight: 700; color: var(--text); text-decoration: none; }
+.app-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 10px 16px;
+}
+
+.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; color: var(--text); text-decoration: none; }
+.brand-mark { width: 30px; height: 30px; flex: none; }
+.brand-mark .mark-bg { fill: var(--accent); }
+.brand-mark .mark-fg { fill: var(--accent-text); }
+.brand-mark .mark-line { fill: none; stroke: var(--accent-text); stroke-width: 2; stroke-linecap: round; }
 
 .pill {
   font-size: 0.8rem;
@@ -71,7 +81,7 @@ p { margin: 0 0 8px; }
 .pill[data-state="mock"] { color: var(--warn); border-color: currentColor; }
 .pill[data-state="off"], .pill[data-state="error"] { color: var(--error); border-color: currentColor; }
 
-.app-main { padding: 20px 16px 48px; max-width: 1120px; margin: 0 auto; }
+.app-main { padding: 20px 16px 48px; max-width: var(--page-width); margin: 0 auto; }
 
 /* --- controls --------------------------------------------------------- */
 
@@ -113,14 +123,18 @@ label { display: block; font-size: 0.875rem; font-weight: 600; margin: 12px 0 4p
 
 /* --- projects page ---------------------------------------------------- */
 
+/* The heading has a row of its own, so the form's card starts level with the first project. */
 .projects-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 24px;
+  grid-template-areas: "title ." "list form";
+  gap: 4px 24px;
   align-items: start;
 }
+.projects-main { display: contents; }
+.projects-main h1 { grid-area: title; }
 
-.project-list { display: grid; gap: 12px; }
+.project-list { grid-area: list; display: grid; gap: 12px; }
 
 .project-card {
   display: block;
@@ -148,7 +162,7 @@ label { display: block; font-size: 0.875rem; font-weight: 600; margin: 12px 0 4p
   font-weight: 600;
 }
 
-.new-project { padding: 16px; }
+.new-project { grid-area: form; padding: 16px; }
 .new-project button[type="submit"] { margin-top: 16px; width: 100%; }
 
 /* --- project page ----------------------------------------------------- */
@@ -383,8 +397,7 @@ legend { font-size: 0.875rem; font-weight: 600; padding: 0 4px; }
 }
 
 @media (max-width: 760px) {
-  .projects-page { grid-template-columns: 1fr; }
-  .new-project { order: -1; }
+  .projects-page { grid-template-columns: 1fr; grid-template-areas: "form" "title" "list"; row-gap: 16px; }
   .message { max-width: 100%; }
 }
 

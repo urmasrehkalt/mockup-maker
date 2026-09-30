@@ -24,7 +24,7 @@ Kõik ülesande põhifunktsioonid on olemas ja kasutatavad nii ChatGPT tellimuse
 
 ### Kuidas seda kontrolliti
 
-- **Automaattestid:** 261 testi (`.venv/bin/pytest`), mis katavad iga loo kriteeriumid. AI ja tracker on testides asendatud, nii et testid ei vaja võrku ega sisselogimist.
+- **Automaattestid:** 265 testi (`.venv/bin/pytest`), mis katavad iga loo kriteeriumid. AI ja tracker on testides asendatud, nii et testid ei vaja võrku ega sisselogimist.
 - **Brauser:** iga loo lõpus kontrolliti töövoogu Playwrightiga päris brauseris (laua- ja telefonilaius, hele ja tume teema).
 - **Päris AI:** iga AI-ga seotud loo lõpus käis sama töövoog läbi reaalse Codexiga ning selle käigus leitud probleemid parandati enne loo lõpetamist (vt allpool).
 - **Vastuvõtukatse:** ülesande vastuvõtukatse sammud käidi läbi päris Codexiga eraldi andmebaasiga (tulemus allpool).
