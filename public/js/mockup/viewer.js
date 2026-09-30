@@ -5,13 +5,15 @@ import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { formatDateTime, t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
+import { openMockupEditor } from "./editor.js";
 import { renderTree } from "./render.js";
 
 /**
  * @param mockup   { id?, title, version, tree }
- * @param options  { projectId, onChange } to show versions; onChange() runs after a restore
+ * @param options  { projectId, onChange, sharedWith } to show versions and allow editing;
+ *                 onChange() runs after a restore or a saved edit
  */
-export function openMockupViewer(mockup, { projectId = null, onChange = null } = {}) {
+export function openMockupViewer(mockup, { projectId = null, onChange = null, sharedWith = [] } = {}) {
   const stage = h("div", { class: "wf-stage" });
   const side = h("aside", { class: "versions" });
   const heading = h("h2", {});
@@ -72,6 +74,10 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null } =
     h("div", { class: "viewer-head" }, heading,
       h("div", { class: "segmented" }, toggles),
       download,
+      projectId && mockup.id ? h("button", { type: "button", class: "small", onclick: () => {
+        close();
+        openMockupEditor({ ...mockup, tree: shown.tree }, { projectId, sharedWith, onSaved: onChange });
+      } }, `✎ ${t("mockup.edit")}`) : null,
       h("button", { type: "button", class: "small", onclick: close }, t("mockup.close"))),
     h("div", { class: "viewer-body" }, stage, projectId && mockup.id ? side : null));
   dialog.addEventListener("cancel", (e) => { e.preventDefault(); close(); });

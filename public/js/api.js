@@ -22,7 +22,9 @@ async function request(method, path, body) {
     const detail = data?.detail && typeof data.detail === "object" && !Array.isArray(data.detail) ? data.detail : {};
     const code = data?.error?.code ?? detail.code ?? (response.status === 404 ? "not_found"
       : response.status === 422 ? "validation" : "generic");
-    throw new ApiError(response.status, code, data?.error?.message ?? detail.message ?? response.statusText, detail);
+    // FastAPI's own validation errors are a list; keep their messages readable.
+    const listed = Array.isArray(data?.detail) ? data.detail.map((d) => d.msg).join("; ") : null;
+    throw new ApiError(response.status, code, data?.error?.message ?? detail.message ?? listed ?? response.statusText, detail);
   }
   return data;
 }
@@ -48,6 +50,7 @@ export const api = {
   templates: () => request("GET", "/api/mockup-templates"),
   checkCriteria: (texts) => request("POST", "/api/criteria/check", { texts }),
   mockupVersions: (id, mockupId) => request("GET", `/api/projects/${id}/mockups/${mockupId}/versions`),
+  saveMockupVersion: (id, mockupId, tree) => request("POST", `/api/projects/${id}/mockups/${mockupId}/versions`, { tree }),
   restoreVersion: (id, mockupId, number) => request("POST", `/api/projects/${id}/mockups/${mockupId}/versions/${number}/restore`),
   createMockup: (id, data) => request("POST", `/api/projects/${id}/mockups`, data),
   linkMockup: (id, storyId, mockupId) => request("PUT", `/api/projects/${id}/stories/${storyId}/mockups/${mockupId}`),

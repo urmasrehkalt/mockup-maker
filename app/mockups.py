@@ -156,6 +156,11 @@ class Mockup(BaseModel):
     updated_at: str
 
 
+class TreeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tree: Tree
+
+
 class Version(BaseModel):
     number: int
     note: str
@@ -269,6 +274,18 @@ def restore(conn: sqlite3.Connection, project_id: int, mockup_id: int, number: i
     return get_mockup(conn, project_id, mockup_id)
 
 
+def save_edit(conn: sqlite3.Connection, project_id: int, mockup_id: int, tree: Tree) -> Mockup:
+    """A hand-edited tree becomes the newest version (undoable like any other change)."""
+    mockup = get_mockup(conn, project_id, mockup_id)
+    if tree == mockup.tree:
+        return mockup
+    with conn:
+        backlog.record_undo(conn, project_id, "mockup_edited", title=mockup.title)
+        add_version(conn, mockup_id, tree, note="manual")
+        db.touch_project(conn, project_id)
+    return get_mockup(conn, project_id, mockup_id)
+
+
 def link(conn: sqlite3.Connection, project_id: int, story_id: int, mockup_id: int) -> None:
     story = backlog.get_story(conn, project_id, story_id)
     get_mockup(conn, project_id, mockup_id)
@@ -330,6 +347,12 @@ def read_mockup(project_id: int, mockup_id: int, conn: sqlite3.Connection = Depe
 @router.get("/api/projects/{project_id}/mockups/{mockup_id}/versions", response_model=list[Version])
 def list_versions(project_id: int, mockup_id: int, conn: sqlite3.Connection = Depends(db.get_db)):
     return versions(conn, project_id, mockup_id)
+
+
+@router.post("/api/projects/{project_id}/mockups/{mockup_id}/versions", response_model=Mockup)
+def post_version(project_id: int, mockup_id: int, data: TreeIn,
+                 conn: sqlite3.Connection = Depends(db.get_db)):
+    return save_edit(conn, project_id, mockup_id, data.tree)
 
 
 @router.post("/api/projects/{project_id}/mockups/{mockup_id}/versions/{number}/restore",
