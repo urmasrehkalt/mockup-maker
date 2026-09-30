@@ -13,10 +13,16 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
 - `app/main.py`: app setup, lifespan (runs migrations), static mounting
 - `app/config.py`: env config; `.env` is loaded without overriding the real environment
 - `app/db.py`: connections and migrations
+- `app/projects.py`: projects, conversation messages, current step and the resume
+  suggestion (deterministic from step and history, so it works with AI off)
 - `app/ai/`: AI layer. `providers.py` runs `codex exec` on a ChatGPT subscription (ported
   from acupoint) or `mock`/`off`; `schema.py` turns a Pydantic model into a strict
   `--output-schema`; `tasks.py` `run_task()` validates every answer and retries once.
   New AI features define a `Task` (instructions, response model, mock answer).
+
+Frontend: ES modules in `public/js/` (`app.js` hash router, `views/`, `api.js`, `i18n.js`
+`t()` strings). Build DOM only through `dom.js` `h()`, which inserts text as text nodes:
+never assign data or AI output to `innerHTML`.
 
 Planned (see GitHub issues): mockups as a validated component-JSON tree rendered by the app
 (never AI HTML), one-way push to the Agile Tracker (`../urmas-agiilne-tracker`).

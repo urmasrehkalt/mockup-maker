@@ -57,3 +57,26 @@ def test_migrations_apply_once_and_upgrade_in_place(tmp_path, monkeypatch):
     conn = db.connect(path)
     assert conn.execute("SELECT COUNT(*) FROM a").fetchone()[0] == 1
     conn.close()
+
+
+def test_request_connection_can_be_used_from_another_thread(db_path):
+    # FastAPI may open the dependency's connection in one worker thread and run
+    # the endpoint in another; SQLite rejects that by default.
+    import threading
+
+    db.init(db_path)
+    dependency = db.get_db()
+    conn = next(dependency)
+    errors = []
+
+    def use():
+        try:
+            conn.execute("SELECT 1").fetchone()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    worker = threading.Thread(target=use)
+    worker.start()
+    worker.join()
+    dependency.close()
+    assert errors == []
