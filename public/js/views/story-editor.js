@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
+import { storyMockups } from "../mockup/story-mockups.js";
 
 const STATUSES = ["idea", "needs_clarification", "reviewed", "ready"];
 const SIZES = ["", "S", "M", "L"];
@@ -100,6 +101,7 @@ export function openStoryEditor(state, story, reload) {
     h("fieldset", {}, h("legend", {}, t("editor.criteria")), criteria.element),
     h("fieldset", {}, h("legend", {}, t("editor.questions")), questions.element),
     label("st-notes", t("editor.notes")), notes,
+    storyMockups(state, story, reload),
     errors,
     h("div", { class: "dialog-actions" },
       isNew ? null : h("button", { type: "button", class: "danger", onclick: remove }, t("editor.delete")),

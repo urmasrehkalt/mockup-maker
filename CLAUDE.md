@@ -22,6 +22,9 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
 - `app/conversation.py`: guided conversation, one `POST /turn` per user input. User decisions
   (answers, roles, notes) are stored before the AI call; the AI payload is built from DB state;
   `check_turn` holds state-aware rules (question minimum/cap) retried via `run_task(check=...)`
+- `app/mockups.py` + `app/mockup_templates.py`: mockups are a component tree (one node shape,
+  per-type rules in `check_tree`), stored as versions, linked to stories. Never HTML: the browser
+  renders trees in `public/js/mockup/render.js` via `h()` with `data-component-id` on every element
 - `app/ai/`: AI layer. `providers.py` runs `codex exec` on a ChatGPT subscription (ported
   from acupoint) or `mock`/`off`; `schema.py` turns a Pydantic model into a strict
   `--output-schema`; `tasks.py` `run_task()` validates every answer and retries once.

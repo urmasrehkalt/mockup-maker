@@ -14,7 +14,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import backlog, db
+from . import backlog, db, mockups
 
 Step = Literal["idea", "roles", "stories", "priorities", "criteria", "refinements", "grooming"]
 STEPS: tuple[str, ...] = Step.__args__
@@ -83,6 +83,7 @@ class ProjectState(BaseModel):
     project: Project
     roles: list[Role]
     stories: list[backlog.Story]
+    mockups: list[mockups.Mockup]
     undo: backlog.Undo | None
     messages: list[Message]
     resume: Resume
@@ -199,6 +200,7 @@ def state(conn: sqlite3.Connection, project_id: int) -> ProjectState:
     history = messages(conn, project_id)
     return ProjectState(project=project, roles=roles(conn, project_id),
                         stories=backlog.stories(conn, project_id),
+                        mockups=mockups.mockups(conn, project_id),
                         undo=backlog.last_undo(conn, project_id), messages=history,
                         resume=resume(project, history))
 

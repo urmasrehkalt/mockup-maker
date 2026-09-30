@@ -62,6 +62,7 @@ class ProjectPage {
   async reload() {
     this.state = await api.openProject(this.state.project.id);
     if (this.current) this.draw();
+    return this.state;
   }
 
   async goTo(step) {

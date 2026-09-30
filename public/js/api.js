@@ -36,4 +36,8 @@ export const api = {
   deleteStory: (id, storyId) => request("DELETE", `/api/projects/${id}/stories/${storyId}`),
   reorderStories: (id, ids) => request("PUT", `/api/projects/${id}/stories/order`, { ids }),
   undo: (id) => request("POST", `/api/projects/${id}/undo`),
+  templates: () => request("GET", "/api/mockup-templates"),
+  createMockup: (id, data) => request("POST", `/api/projects/${id}/mockups`, data),
+  linkMockup: (id, storyId, mockupId) => request("PUT", `/api/projects/${id}/stories/${storyId}/mockups/${mockupId}`),
+  unlinkMockup: (id, storyId, mockupId) => request("DELETE", `/api/projects/${id}/stories/${storyId}/mockups/${mockupId}`),
 };

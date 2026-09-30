@@ -99,6 +99,30 @@ MIGRATIONS: list[str] = [
     ALTER TABLE projects ADD COLUMN current_story_id INTEGER
         REFERENCES stories(id) ON DELETE SET NULL;
     """,
+    # 6: mockups, their versions, and which stories they belong to
+    """
+    CREATE TABLE mockups (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        title       TEXT NOT NULL,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+    );
+    CREATE TABLE mockup_versions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        mockup_id   INTEGER NOT NULL REFERENCES mockups(id) ON DELETE CASCADE,
+        number      INTEGER NOT NULL,
+        tree        TEXT NOT NULL,
+        note        TEXT NOT NULL DEFAULT '',
+        created_at  TEXT NOT NULL,
+        UNIQUE (mockup_id, number)
+    );
+    CREATE TABLE story_mockups (
+        story_id    INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+        mockup_id   INTEGER NOT NULL REFERENCES mockups(id) ON DELETE CASCADE,
+        PRIMARY KEY (story_id, mockup_id)
+    );
+    """,
 ]
 
 

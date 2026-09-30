@@ -81,6 +81,7 @@ class Story(StoryParts):
     size: Size | None
     origin: Origin
     criteria: list[Criterion]
+    mockup_ids: list[int]
     open_questions: list[str]
     notes: str
     created_at: str
@@ -117,13 +118,18 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
             "WHERE s.project_id = ? ORDER BY c.position, c.id", (project_id,)):
         criteria.setdefault(row["story_id"], []).append(
             Criterion(id=row["id"], text=row["text"], origin=row["origin"]))
+    links: dict[int, list[int]] = {}
+    for row in conn.execute(
+            "SELECT l.story_id, l.mockup_id FROM story_mockups l JOIN stories s ON s.id = l.story_id "
+            "WHERE s.project_id = ? ORDER BY l.mockup_id", (project_id,)):
+        links.setdefault(row["story_id"], []).append(row["mockup_id"])
     result = []
     for row in rows:
         data = dict(row)
         data["open_questions"] = json.loads(data["open_questions"])
         parts = StoryParts(**{k: data[k] for k in StoryParts.model_fields})
         result.append(Story(**data, key=f"US-{data['number']}", title=title(parts),
-                            criteria=criteria.get(row["id"], [])))
+                            criteria=criteria.get(row["id"], []), mockup_ids=links.get(row["id"], [])))
     return result
 
 
@@ -138,6 +144,7 @@ def snapshot(conn: sqlite3.Connection, project_id: int) -> list[dict]:
     """The backlog as the AI sees it: current state, including manual edits."""
     return [{"key": s.key, "role_name": s.role_name, "title": s.title, "status": s.status,
              "size": s.size, "criteria": [c.text for c in s.criteria],
+             "has_mockup": bool(s.mockup_ids),
              "open_questions": s.open_questions}
             for s in stories(conn, project_id)]
 
@@ -150,7 +157,11 @@ def _dump(conn: sqlite3.Connection, project_id: int) -> str:
     criteria_rows = [dict(r) for r in conn.execute(
         "SELECT c.* FROM criteria c JOIN stories s ON s.id = c.story_id WHERE s.project_id = ?",
         (project_id,))]
-    return json.dumps({"stories": story_rows, "criteria": criteria_rows}, ensure_ascii=False)
+    link_rows = [dict(r) for r in conn.execute(
+        "SELECT l.* FROM story_mockups l JOIN stories s ON s.id = l.story_id WHERE s.project_id = ?",
+        (project_id,))]
+    return json.dumps({"stories": story_rows, "criteria": criteria_rows, "links": link_rows},
+                      ensure_ascii=False)
 
 
 def record_undo(conn: sqlite3.Connection, project_id: int, action: str,
@@ -207,6 +218,11 @@ def undo(conn: sqlite3.Connection, project_id: int) -> Undo:
         conn.execute("UPDATE stories SET number = -id WHERE project_id = ?", (project_id,))
         _upsert(conn, "stories", before["stories"])
         _upsert(conn, "criteria", before["criteria"])
+        conn.execute("DELETE FROM story_mockups WHERE story_id IN "
+                     "(SELECT id FROM stories WHERE project_id = ?)", (project_id,))
+        conn.executemany("INSERT OR IGNORE INTO story_mockups (story_id, mockup_id) "
+                         "SELECT ?, id FROM mockups WHERE id = ?",
+                         [(link["story_id"], link["mockup_id"]) for link in before.get("links", [])])
         conn.execute("DELETE FROM undo_log WHERE id = ?", (row["id"],))
         db.touch_project(conn, project_id)
     return Undo(action=row["action"], params=json.loads(row["params"]))
