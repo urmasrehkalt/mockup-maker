@@ -720,3 +720,6 @@ dialog.story-map { width: min(1400px, calc(100vw - 24px)); max-height: calc(100v
 .map-divider { display: flex; align-items: center; }
 .map-divider span { writing-mode: vertical-rl; transform: rotate(180deg); padding: 6px 2px; border-left: 2px dashed var(--accent);
   color: var(--accent); font-size: 0.7rem; font-weight: 700; }
+
+.backlog.flash { box-shadow: 0 0 0 3px var(--accent); transition: box-shadow 0.2s; }
+#backlog-title:focus { outline: none; }

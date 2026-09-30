@@ -18,17 +18,22 @@ function loadTemplates(language) {
 }
 import { openMockupViewer } from "../mockup/viewer.js";
 
-// Resume actions (from the server) that move the process to a step.
-const ACTION_STEP = {
-  continue_conversation: null,
-  continue_roles: "roles",
-  go_stories: "stories",
-  continue_stories: "stories",
-  choose_priority: "priorities",
-  continue_criteria: "criteria",
-  next_story: "criteria",
-  enter_refinement: "refinements",
-  review_backlog: "grooming",
+// What each resume action (offered by the server, app/projects.py RESUME_ACTIONS) does.
+// `step`: a conversation turn that moves the process there; `review`: runs the backlog
+// review; `local`: acts in the page only, nothing is sent to the AI.
+// tests/test_resume_actions.py checks that every offered action is here and has labels.
+const RESUME = {
+  continue_conversation: { step: null },
+  continue_roles: { step: "roles" },
+  go_stories: { step: "stories" },
+  continue_stories: { step: "stories" },
+  choose_priority: { step: "priorities" },
+  continue_criteria: { step: "criteria" },
+  next_story: { step: "priorities" }, // the next story is chosen at the priorities step
+  enter_refinement: { step: "refinements" },
+  review_backlog: { review: true },
+  view_backlog: { local: () => showBacklog() },
+  end_meeting: { local: () => endMeeting() },
 };
 
 /**
@@ -493,13 +498,28 @@ function resumeCard(state, last, lastAssistant, send) {
   return h("div", { class: "message assistant" },
     author("assistant"),
     h("p", {}, t("resume.continue", { step: t(`step.${project.step}`) })),
-    h("div", { class: "choices" }, resume.actions.map((action, i) => h("button", {
+    h("div", { class: "choices" }, resume.actions.filter((action) => RESUME[action]).map((action, i) => h("button", {
       type: "button",
       class: i === 0 ? "choice primary" : "choice",
-      onclick: () => (action === "end_meeting" ? endMeeting()
-        : action === "review_backlog" ? send({ kind: "review" })
-          : send({ kind: "next", label: t(`action.${action}`), step: ACTION_STEP[action] ?? null })),
+      onclick: () => {
+        const does = RESUME[action];
+        if (does.local) does.local();
+        else if (does.review) send({ kind: "review" });
+        else send({ kind: "next", label: t(`action.${action}`), step: does.step });
+      },
     }, t(`action.${action}`)))));
+}
+
+// Bring the backlog panel into view and move focus there (on narrow screens it is below the chat).
+function showBacklog() {
+  const panel = document.querySelector(".backlog");
+  if (!panel) return;
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  const heading = panel.querySelector("#backlog-title");
+  heading?.setAttribute("tabindex", "-1");
+  heading?.focus({ preventScroll: true });
+  panel.classList.add("flash");
+  setTimeout(() => panel.classList.remove("flash"), 1500);
 }
 
 function errorCard(error, send, state) {
