@@ -71,6 +71,29 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX stories_by_project ON stories(project_id, position);
     """,
+    # 4: acceptance criteria, undo history, story numbers that are never reused
+    """
+    CREATE TABLE criteria (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        story_id    INTEGER NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+        text        TEXT NOT NULL,
+        position    INTEGER NOT NULL,
+        origin      TEXT NOT NULL CHECK (origin IN ('ai', 'manual')),
+        created_at  TEXT NOT NULL
+    );
+    CREATE INDEX criteria_by_story ON criteria(story_id, position);
+    CREATE TABLE undo_log (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        action      TEXT NOT NULL,
+        params      TEXT NOT NULL DEFAULT '{}',
+        snapshot    TEXT NOT NULL,
+        created_at  TEXT NOT NULL
+    );
+    ALTER TABLE projects ADD COLUMN story_seq INTEGER NOT NULL DEFAULT 0;
+    UPDATE projects SET story_seq =
+        (SELECT COALESCE(MAX(number), 0) FROM stories WHERE stories.project_id = projects.id);
+    """,
 ]
 
 

@@ -31,4 +31,9 @@ export const api = {
   openProject: (id) => request("GET", `/api/projects/${id}`),
   patchProject: (id, data) => request("PATCH", `/api/projects/${id}`, data),
   turn: (id, input) => request("POST", `/api/projects/${id}/turn`, input),
+  createStory: (id, data) => request("POST", `/api/projects/${id}/stories`, data),
+  patchStory: (id, storyId, data) => request("PATCH", `/api/projects/${id}/stories/${storyId}`, data),
+  deleteStory: (id, storyId) => request("DELETE", `/api/projects/${id}/stories/${storyId}`),
+  reorderStories: (id, ids) => request("PUT", `/api/projects/${id}/stories/order`, { ids }),
+  undo: (id) => request("POST", `/api/projects/${id}/undo`),
 };

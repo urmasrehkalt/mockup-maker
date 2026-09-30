@@ -82,6 +82,7 @@ class ProjectState(BaseModel):
     project: Project
     roles: list[Role]
     stories: list[backlog.Story]
+    undo: backlog.Undo | None
     messages: list[Message]
     resume: Resume
 
@@ -196,7 +197,8 @@ def state(conn: sqlite3.Connection, project_id: int) -> ProjectState:
     project = get(conn, project_id)
     history = messages(conn, project_id)
     return ProjectState(project=project, roles=roles(conn, project_id),
-                        stories=backlog.stories(conn, project_id), messages=history,
+                        stories=backlog.stories(conn, project_id),
+                        undo=backlog.last_undo(conn, project_id), messages=history,
                         resume=resume(project, history))
 
 

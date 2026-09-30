@@ -220,6 +220,7 @@ def apply_input(conn: sqlite3.Connection, project_id: int, data: Any) -> project
                     0 <= i < len(offered) for i in data.selected):
                 raise HTTPException(422, "Selected stories must be distinct suggestions")
             chosen = [backlog.StoryParts(**offered[i]) for i in sorted(data.selected)]
+            backlog.record_undo(conn, project_id, "stories_added", count=len(chosen))
             added = backlog.add_stories(conn, project_id, chosen, origin="ai")
             message.content["stories_added"] = {"selected": sorted(data.selected),
                                                 "keys": [s.key for s in added]}

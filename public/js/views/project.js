@@ -59,6 +59,11 @@ class ProjectPage {
       { id: -1, role: "user", content: { input }, created_at: "" }] };
   }
 
+  async reload() {
+    this.state = await api.openProject(this.state.project.id);
+    if (this.current) this.draw();
+  }
+
   async goTo(step) {
     if (this.pending || step === this.state.project.step) return;
     try {
@@ -81,7 +86,7 @@ class ProjectPage {
       stepBar(project.step, (step) => this.goTo(step), this.pending),
       h("div", { class: "workspace" },
         conversation(this.state, (input) => this.send(input), { pending: this.pending, error: this.error }),
-        backlogPanel(this.state)));
+        backlogPanel(this.state, () => this.reload())));
     this.view.querySelector(".step.current")?.scrollIntoView({ block: "nearest", inline: "center" });
     const end = this.view.querySelector(".composer");
     if (this.state.messages.length) end?.scrollIntoView({ block: "end" });
