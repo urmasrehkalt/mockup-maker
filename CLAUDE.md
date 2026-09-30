@@ -22,7 +22,11 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   lives in `readiness()`; every change that can affect it calls `check_status()` in its transaction
 - `app/conversation.py`: guided conversation, one `POST /turn` per user input. User decisions
   (answers, roles, notes) are stored before the AI call; the AI payload is built from DB state;
-  `check_turn` holds state-aware rules (question minimum/cap) retried via `run_task(check=...)`
+  `check_turn` holds state-aware rules (question minimum/cap) retried via `run_task(check=...)`.
+  Cards: question, roles, stories, priority, proposal (criteria + mockup), change (refinement),
+  new_view (story + criteria + mockup from a description). Resume actions offered by
+  `projects.RESUME_ACTIONS` must each have a handler in `public/js/views/chat.js` `RESUME` and
+  labels in both languages (tests/test_resume_actions.py)
 - `app/mockups.py` + `app/mockup_templates.py`: mockups are a component tree (one node shape,
   per-type rules in `check_tree`), stored as versions, linked to stories. Never HTML: the browser
   renders trees in `public/js/mockup/render.js` via `h()` with `data-component-id` on every element
@@ -34,6 +38,8 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
 - `app/tracker.py` + `app/mockup_png.py`: one-way push to the Agile Tracker through its API only
   (it forbids unknown fields; `tracker_links` makes re-pushes update). Mockups go as PNG from a
   small Pillow layout engine; tests use `FakeTracker` in tests/test_tracker.py, never a live tracker
+- `app/export.py`: backlog export to Markdown and CSV (UTF-8 with BOM)
+- `app/templates.py`: built-in and user-saved project templates
 - `app/ai/`: AI layer. `providers.py` runs `codex exec` on a ChatGPT subscription (ported
   from acupoint) or `mock`/`off`; `schema.py` turns a Pydantic model into a strict
   `--output-schema`; `tasks.py` `run_task()` validates every answer and retries once.
@@ -45,13 +51,12 @@ language (`projects.language`) is separate: story sentences use `storyTitle()`/`
 with it, never `t()`. Build DOM only through `dom.js` `h()`, which inserts text as text nodes:
 never assign data or AI output to `innerHTML`.
 
-Planned (see GitHub issues): mockups as a validated component-JSON tree rendered by the app
-(never AI HTML), one-way push to the Agile Tracker (`../urmas-agiilne-tracker`).
-
 ## Commands
 
-- Tests: `.venv/bin/pytest` (no network, server or credentials needed)
-- Run app: `./start.sh` (port 8010; the Agile Tracker uses 8000), `./start.sh stop` / `status`
+- Tests: `.venv/bin/pytest` (no network, server or credentials needed; `tests/conftest.py` resets
+  AI and tracker settings so a developer `.env` never reaches a test)
+- Run app: `./start.sh` (port from `.env`, default 8010; the Agile Tracker uses 8000),
+  `./start.sh stop` / `status`
 
 ## Conventions
 

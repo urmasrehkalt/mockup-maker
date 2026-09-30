@@ -24,7 +24,7 @@ Kõik ülesande põhifunktsioonid on olemas ja kasutatavad nii ChatGPT tellimuse
 
 ### Kuidas seda kontrolliti
 
-- **Automaattestid:** 230+ testi (`.venv/bin/pytest`), mis katavad iga loo kriteeriumid. AI ja tracker on testides asendatud, nii et testid ei vaja võrku ega sisselogimist.
+- **Automaattestid:** 250 testi (`.venv/bin/pytest`), mis katavad iga loo kriteeriumid. AI ja tracker on testides asendatud, nii et testid ei vaja võrku ega sisselogimist.
 - **Brauser:** iga loo lõpus kontrolliti töövoogu Playwrightiga päris brauseris (laua- ja telefonilaius, hele ja tume teema).
 - **Päris AI:** iga AI-ga seotud loo lõpus käis sama töövoog läbi reaalse Codexiga ning selle käigus leitud probleemid parandati enne loo lõpetamist (vt allpool).
 - **Vastuvõtukatse:** ülesande vastuvõtukatse sammud käidi läbi päris Codexiga eraldi andmebaasiga (tulemus allpool).
@@ -62,13 +62,15 @@ Valituks sai **`gpt-6-luna` keskmise mõtlemistasemega**: see oli igas sammus ki
 ## Mis jäi pooleli
 
 - **Serverisse paigaldus (#21)** on ootel. Rakendus töötab praegu autori arvutis; paigalduse plaan (systemd teenus, Caddy, Codexi sisselogimine teenuse kasutajale, tracker samas masinas) on issue'sse kirja pandud.
+- **Sisselogimine puudub.** Rakendus on ühe kasutaja tööriist. Avalikule aadressile paigaldades on vaja vähemalt parooli ette panna (vt README, „Turvalisus“).
+- **Kaks lisavõimalust jäi tegemata:** kliendile jagatav vaatamislink backlog'ile ja mockup'idele ning kõnesisend kliendi täpsustuste jaoks.
 - **Näidisrežiim** (`AI_PROVIDER=mock`) vastab ainult eesti keeles ja lihtsate etteantud vastustega. See on testide ja AI-ta demo jaoks, mitte päris kasutuseks.
 
 ## AI teadaolevad piirangud
 
 Allpool on piirangud, mis tulid välja päris Codexiga katsetades. Mitu neist on serveri reeglitega leevendatud, kuid AI jääb ettepanekute tegijaks, mitte otsustajaks.
 
-- **Aeglus.** Valitud mudeliga (`gpt-6-luna`, keskmine) võtab tavaline vestluse samm 6–17 sekundit, kliendi täpsustus umbes 25 sekundit ning kriteeriumide ja mockup'i ettepanek umbes 35 sekundit. Backlog'i ülevaatus võttis seitsme looga 30 sekundit, kuid aeg sõltub mudelist ja backlog'i suurusest: teiste mudelitega kulus samale ülevaatusele 135 ja 226 sekundit. AI ajalõpp (`AI_TIMEOUT`, vaikimisi 180 sekundit) katkestab liiga pika päringu arusaadava veateatega; väga suure backlog'i korral tasub seda suurendada. Liides näitab ootamise ajal, et AI töötab ja kui kaua see võib kesta.
+- **Aeglus.** Valitud mudeliga (`gpt-6-luna`, keskmine) võtab tavaline vestluse samm 6–17 sekundit, kliendi täpsustus umbes 25 sekundit, kriteeriumide ja mockup'i ettepanek umbes 35 sekundit ning uue vaate koostamine kirjelduse põhjal 30–75 sekundit. Backlog'i ülevaatus võttis seitsme looga 30 sekundit, kuid aeg sõltub mudelist ja backlog'i suurusest: teiste mudelitega kulus samale ülevaatusele 135 ja 226 sekundit. AI ajalõpp (`AI_TIMEOUT`, vaikimisi 180 sekundit) katkestab liiga pika päringu arusaadava veateatega; väga suure backlog'i korral tasub seda suurendada. Liides näitab ootamise ajal, et AI töötab ja kui kaua see võib kesta.
 - **AI jätab vahel reegleid vahele.** Esimestes katsetes pakkus AI rollid kohe ilma täpsustava küsimuseta, kuulutas lugusid ilma neid kaartidena lisamata ja pakkus järgmise sammuna tegevust, mida nupp teha ei saa (näiteks „täpsusta lugu US-4“, mis tegelikult oleks jätkanud eelmise looga). Server kontrollib nüüd neid reegleid ja saadab rikkumise korral mudelile tagasiside ühe korduskatsega. Kui mudel ka teisel korral reeglit ei järgi, võetakse vastus vastu (välja arvatud kindlad piirid, näiteks kuni 3 täpsustavat küsimust ja ainult valitud loo muutmine, mida server alati jõustab).
 - **Prioriteedi soovitus lähtub väärtusest, mitte järjekorrast.** AI soovitab alustada loost, ilma milleta ülejäänud töövoog on mõttetu (ülesande näite eeskujul), mitte tingimata happy path'i esimesest loost. Näiteks soovitas see alustada liitumissoovi saatmisest, sest see on samm, mis annab klubile kontakti. Põhjendus on alati kaardil näha ja kasutaja võib valida teise loo.
 - **Kriteeriumide kvaliteet.** Kriteeriumid on enamasti kontrollitavad ja viitavad mockup'i elemendile, kuid kipuvad olema sarnase ülesehitusega („Lehel on …“, „Vormis on …“) ning jätavad vigade ja erijuhtude kriteeriumid pigem kõrvale, sest AI-l palutakse keskenduda põhitöövoole. Mittekontrollitavat kriteeriumi näeb kasutaja hoiatusena.

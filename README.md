@@ -21,7 +21,7 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 - **Kliendi täpsustus.** AI koostab muudatusettepaneku, mida näeb enne rakendamist eelvaatena. Server tagab, et muutub ainult valitud lugu.
 - **Groomimine.** Käsitsi jagamine, ühendamine, MVP joon ja alguspunkt ning AI ülevaatus, mille iga leiu saab rakendada, muuta või tähelepanuta jätta. Story map näitab iga rolli happy path'i eraldi real.
 - **Eksport.** Backlog'i saab alla laadida Markdownina (lugemiseks ja jagamiseks) ja CSV-na (tabelarvutusse), mõlemad backlog'i järjekorras koos MVP joonega.
-- **Agile Tracker.** Lood saab koos mockup'i piltidega saata [Agile Trackerisse](https://github.com/urmasrehkalt/urmas-agiilne-tracker); uuesti saatmine uuendab olemasolevat lugu.
+- **Agile Tracker.** Lood saab koos mockup'i piltidega saata [Agile Trackerisse](https://github.com/urmasrehkalt/agile-tracker); uuesti saatmine uuendab olemasolevat lugu.
 - **Kaks keelt.** Liides on eesti ja inglise keeles, AI kirjutab projekti keeles.
 
 ## Ülesehitus
@@ -29,8 +29,9 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 | Kaust / fail | Sisu |
 | --- | --- |
 | `app/main.py` | FastAPI rakendus, marsruudid ja staatilised failid |
+| `app/config.py` | seaded keskkonnast ja `.env` failist |
 | `app/ai/` | AI-kiht: Codexi ja näidispakkuja, skeemi koostamine ja vastuste kontroll koos kordusega |
-| `app/conversation.py` | juhitud vestlus: üks samm ühe kasutaja sisendi kohta, reeglid ja AI juhised |
+| `app/conversation.py` | juhitud vestlus: üks samm ühe kasutaja sisendi kohta, reeglid ja AI juhised, uus vaade kirjeldusest |
 | `app/backlog.py` | lood, kriteeriumid, tagasivõtmine, valmisoleku definitsioon, jagamine ja ühendamine |
 | `app/mockups.py`, `app/mockup_templates.py`, `app/mockup_png.py` | mockup'i komponendid ja reeglid, mallid, versioonid, märkmed ja PNG |
 | `app/review.py`, `app/testability.py` | AI ülevaatus ja kriteeriumide kontrollitavuse reegel |
@@ -38,6 +39,8 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 | `app/export.py` | backlog'i eksport Markdowni ja CSV-sse |
 | `public/` | liides: HTML, CSS ja JavaScripti moodulid ilma ehitussammuta |
 | `tests/` | automaattestid (pytest); AI ja tracker on testides asendatud |
+| `docs/` | esitamisdokumendid (vt [Dokumendid](#dokumendid)) |
+| `start.sh` | virtuaalkeskkonna loomine ning serveri käivitamine ja peatamine |
 
 ## Turvalisus
 
@@ -45,6 +48,7 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 - Iga AI vastus kontrollitakse serveris skeemi ja reeglite järgi enne, kui see kasutajani jõuab.
 - Mockup ei ole kunagi HTML: rakendus joonistab komponendipuu ise ja kogu tekst lisatakse tekstina, märkmed on SVG ilma HTML-ita. Seega ei saa mockup'i sisu brauseris koodi käivitada.
 - Trackeri päringud teeb server, brauser trackeriga otse ei suhtle.
+- Rakendusel **ei ole sisselogimist**: see on mõeldud ühe projektijuhi tööriistaks tema enda arvutis. Kui see pannakse avalikule aadressile, peab selle ette panema vähemalt parooli (näiteks Caddy `basic_auth`), sest muidu saaks igaüks kasutada serveri AI tellimust ja näha projekte.
 
 ## Tehnoloogiad
 
@@ -92,6 +96,7 @@ määratud väärtus on tähtsam kui `.env` failis olev.
 | `TRACKER_PUBLIC_URL` | tühi | Trackeri aadress brauseris (linkideks) |
 | `TRACKER_POINTS` | `S=2,M=5,L=8` | loo suurus → trackeri punktid |
 | `TRACKER_TIMEOUT` | `10` | sekundid ühe trackeri päringu kohta |
+| `MOCKUP_FONT`, `MOCKUP_FONT_BOLD` | süsteemi font | TrueType fondifailid mockup'i PNG ekspordi jaoks; vaikimisi DejaVu Sans (Linux) või Arial (macOS), nende puudumisel Pillow'ga kaasas olev font |
 
 ## AI ühendamine (ChatGPT tellimus)
 
@@ -106,7 +111,8 @@ codex login --device-auth   # üks kord, kinnita kood brauseris
 
 Seejärel pane `.env` faili `AI_PROVIDER=codex` ja taaskäivita server. Iga AI vastus
 kontrollitakse serveris skeemi järgi; vigase vastuse korral proovitakse üks kord uuesti
-ja seejärel näidatakse arusaadavat veateadet.
+ja seejärel näidatakse arusaadavat veateadet. Vaikimisi mudel on `gpt-6-luna` keskmise
+mõtlemistasemega; valiku põhjendus (kolme mudeli võrdlus) on [ülevaates](docs/ulevaade.md#mudeli-valik).
 
 ## Keeled
 
@@ -124,4 +130,5 @@ ainult eesti keeles.
 ```
 
 Testid ei vaja võrku, töötavat serverit ega päris võtmeid: AI ja Agile Tracker on testides
-asendatud. Andmebaas luuakse iga testi jaoks eraldi ajutisse kausta.
+asendatud. Andmebaas luuakse iga testi jaoks eraldi ajutisse kausta ning arendaja `.env` faili
+AI ja trackeri seaded testidesse ei jõua.
