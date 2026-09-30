@@ -285,3 +285,21 @@ def test_ai_error_becomes_json_error_response():
     response = run(ai_error_handler(None, AIError("ai_timeout", "too slow")))
     assert response.status_code == 504
     assert json.loads(response.body) == {"error": {"code": "ai_timeout", "message": "too slow"}}
+
+
+# --- soft state check ----------------------------------------------------
+
+def test_check_problem_is_retried_with_feedback():
+    other = {**VALID, "text": "Better question?"}
+    provider = FakeProvider(VALID, other)
+    check = lambda q: "ask something better" if q.text == VALID["text"] else None  # noqa: E731
+    result = run(run_task(QUESTION, {"idea": "x"}, provider, check=check))
+    assert result.text == "Better question?"
+    assert "ask something better" in provider.prompts[1]
+
+
+def test_check_is_soft_when_the_model_insists():
+    provider = FakeProvider(VALID, VALID)
+    result = run(run_task(QUESTION, {"idea": "x"}, provider, check=lambda q: "no"))
+    assert result.text == VALID["text"]
+    assert len(provider.prompts) == 2

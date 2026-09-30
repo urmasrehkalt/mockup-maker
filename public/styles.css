@@ -200,6 +200,53 @@ label { display: block; font-size: 0.875rem; font-weight: 600; margin: 12px 0 4p
 .option-list { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
 
 .choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.choice.quiet { border-style: dashed; color: var(--muted); }
+.choice.option[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.choice.option[aria-pressed="true"]::before { content: "✓ "; }
+.next-steps { margin-top: 12px; }
+
+.card-block {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.card-block.answered { padding: 8px 12px; }
+.card-block.answered p { margin: 0; }
+.card-title { font-weight: 600; margin-bottom: 4px; }
+.card-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.hint { font-size: 0.85rem; color: var(--muted); font-weight: 400; margin: 6px 0 0; }
+.hint:empty { display: none; }
+
+.inline-form { display: flex; gap: 8px; margin-top: 10px; }
+.inline-form[hidden] { display: none; }
+.inline-form input { flex: 1; min-width: 0; }
+
+.role-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.check { display: flex; gap: 10px; align-items: baseline; font-weight: 400; font-size: 0.95rem; margin: 0; padding: 4px 0; cursor: pointer; }
+.check input { width: auto; flex: none; }
+
+.thinking p { color: var(--muted); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .thinking p { animation: none; } }
+
+.conversation.busy .choices button, .conversation.busy .card-block button { pointer-events: none; opacity: 0.55; }
+
+.composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.composer textarea { flex: 1; }
+.notice.error p { margin-bottom: 8px; }
 
 @media (max-width: 760px) {
   .projects-page { grid-template-columns: 1fr; }

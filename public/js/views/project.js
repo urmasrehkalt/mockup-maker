@@ -2,21 +2,9 @@ import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
+import { conversation } from "./chat.js";
 
 const STEPS = ["idea", "roles", "stories", "priorities", "criteria", "refinements", "grooming"];
-
-// Resume actions that move the process to a step. Actions without a handler
-// here are not shown yet; the stories that implement them register them.
-const ACTION_STEP = {
-  continue_roles: "roles",
-  go_stories: "stories",
-  continue_stories: "stories",
-  choose_priority: "priorities",
-  continue_criteria: "criteria",
-  next_story: "criteria",
-  enter_refinement: "refinements",
-  review_backlog: "grooming",
-};
 
 let renderToken = 0;
 
@@ -31,41 +19,78 @@ export async function renderProject(view, id) {
     return;
   }
   if (token !== renderToken) return;
-  draw(view, state);
+  new ProjectPage(view, state, token).draw();
 }
 
-function draw(view, state) {
-  const { project } = state;
-
-  async function goTo(step) {
-    if (step === project.step) return;
-    try {
-      await api.patchProject(project.id, { step });
-      draw(view, await api.openProject(project.id));
-    } catch (error) {
-      mount(errors, notice(errorText(error), "error"));
-    }
+class ProjectPage {
+  constructor(view, state, token) {
+    this.view = view;
+    this.state = state;
+    this.token = token;
+    this.pending = false;
+    this.error = null;
   }
 
-  const errors = h("div", { class: "form-status" });
-  mount(view,
-    h("div", { class: "project-head" },
-      backLink(),
-      h("h1", {}, project.name),
-      project.description ? h("p", { class: "muted" }, project.description) : null),
-    stepBar(project.step, goTo),
-    errors,
-    h("section", { class: "conversation card", "aria-label": t("chat.assistant") },
-      state.messages.map(message),
-      resumeCard(state, goTo)));
-  view.querySelector(".step.current")?.scrollIntoView({ block: "nearest", inline: "center" });
+  get current() {
+    return this.token === renderToken;
+  }
+
+  async send(input) {
+    if (this.pending) return;
+    this.pending = true;
+    this.error = null;
+    if (input.kind !== "retry") this.optimistic(input);
+    this.draw();
+    try {
+      this.state = await api.turn(this.state.project.id, input);
+    } catch (error) {
+      this.error = errorText(error);
+      // The server keeps the user's decision even when the AI fails; show it.
+      this.state = await api.openProject(this.state.project.id).catch(() => this.state);
+    }
+    this.pending = false;
+    if (this.current) this.draw();
+  }
+
+  // Show the user's input at once; the server's state replaces it when the turn returns.
+  optimistic(input) {
+    this.state = { ...this.state, messages: [...this.state.messages,
+      { id: -1, role: "user", content: { input }, created_at: "" }] };
+  }
+
+  async goTo(step) {
+    if (this.pending || step === this.state.project.step) return;
+    try {
+      await api.patchProject(this.state.project.id, { step });
+      this.state = await api.openProject(this.state.project.id);
+      this.error = null;
+    } catch (error) {
+      this.error = errorText(error);
+    }
+    if (this.current) this.draw();
+  }
+
+  draw() {
+    const { project } = this.state;
+    mount(this.view,
+      h("div", { class: "project-head" },
+        backLink(),
+        h("h1", {}, project.name),
+        project.description ? h("p", { class: "muted" }, project.description) : null),
+      stepBar(project.step, (step) => this.goTo(step), this.pending),
+      conversation(this.state, (input) => this.send(input), { pending: this.pending, error: this.error }));
+    this.view.querySelector(".step.current")?.scrollIntoView({ block: "nearest", inline: "center" });
+    const end = this.view.querySelector(".composer");
+    if (this.state.messages.length) end?.scrollIntoView({ block: "end" });
+    if (!this.pending) end?.querySelector("textarea")?.focus({ preventScroll: true });
+  }
 }
 
 function backLink() {
   return h("a", { class: "back", href: "#/" }, `← ${t("projects.back")}`);
 }
 
-function stepBar(current, goTo) {
+function stepBar(current, goTo, disabled) {
   const index = STEPS.indexOf(current);
   return h("nav", { class: "steps", "aria-label": t("steps.label") },
     h("ol", {}, STEPS.map((step, i) => h("li", {},
@@ -73,34 +98,7 @@ function stepBar(current, goTo) {
         type: "button",
         class: `step ${i < index ? "past" : ""} ${i === index ? "current" : ""}`,
         "aria-current": i === index ? "step" : false,
+        disabled,
         onclick: () => goTo(step),
       }, h("span", { class: "step-number" }, String(i + 1)), t(`step.${step}`))))));
-}
-
-function message(msg) {
-  const { text, options } = msg.content;
-  return h("div", { class: `message ${msg.role}` },
-    h("div", { class: "message-author" }, t(msg.role === "user" ? "chat.you" : "chat.assistant")),
-    text ? h("p", {}, text) : null,
-    Array.isArray(options) && options.length
-      ? h("ul", { class: "option-list" }, options.map((o) => h("li", {}, String(o.label ?? o))))
-      : null);
-}
-
-function resumeCard(state, goTo) {
-  const { resume, project } = state;
-  if (resume.kind === "start") {
-    return h("div", { class: "message assistant resume" },
-      h("div", { class: "message-author" }, t("chat.assistant")),
-      h("p", {}, t("resume.start")));
-  }
-  const actions = resume.actions.filter((a) => a in ACTION_STEP || a === "end_meeting");
-  return h("div", { class: "message assistant resume" },
-    h("div", { class: "message-author" }, t("chat.assistant")),
-    h("p", {}, t("resume.continue", { step: t(`step.${project.step}`) })),
-    h("div", { class: "choices" }, actions.map((action, i) => h("button", {
-      type: "button",
-      class: i === 0 ? "choice primary" : "choice",
-      onclick: () => (action === "end_meeting" ? (location.hash = "#/") : goTo(ACTION_STEP[action])),
-    }, t(`action.${action}`)))));
 }

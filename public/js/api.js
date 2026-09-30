@@ -30,4 +30,5 @@ export const api = {
   createProject: (data) => request("POST", "/api/projects", data),
   openProject: (id) => request("GET", `/api/projects/${id}`),
   patchProject: (id, data) => request("PATCH", `/api/projects/${id}`, data),
+  turn: (id, input) => request("POST", `/api/projects/${id}/turn`, input),
 };

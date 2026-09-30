@@ -30,6 +30,24 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX messages_by_project ON messages(project_id, id);
     """,
+    # 2: state the guided conversation builds up, kept outside the chat history
+    """
+    CREATE TABLE roles (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name        TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        position    INTEGER NOT NULL
+    );
+    CREATE TABLE clarifications (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        message_id  INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+        question    TEXT NOT NULL,
+        answer      TEXT,
+        created_at  TEXT NOT NULL
+    );
+    """,
 ]
 
 

@@ -68,8 +68,19 @@ class Resume(BaseModel):
     actions: list[str]
 
 
+class Role(_Stripped):
+    name: str = Field(min_length=1, max_length=60)
+    description: str = Field(default="", max_length=300)
+
+
+class Clarification(BaseModel):
+    question: str
+    answer: str | None  # None: the user skipped it
+
+
 class ProjectState(BaseModel):
     project: Project
+    roles: list[Role]
     messages: list[Message]
     resume: Resume
 
@@ -124,11 +135,55 @@ def add_message(conn: sqlite3.Connection, project_id: int, role: str,
     return Message(id=cur.lastrowid, role=role, content=content, created_at=stamp)
 
 
+def update_message(conn: sqlite3.Connection, message_id: int, content: dict[str, Any]) -> None:
+    conn.execute("UPDATE messages SET content = ? WHERE id = ?",
+                 (json.dumps(content, ensure_ascii=False), message_id))
+
+
+def get_message(conn: sqlite3.Connection, project_id: int, message_id: int) -> Message:
+    row = conn.execute("SELECT * FROM messages WHERE id = ? AND project_id = ?",
+                       (message_id, project_id)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Message not found")
+    return Message(id=row["id"], role=row["role"], content=json.loads(row["content"]),
+                   created_at=row["created_at"])
+
+
 def messages(conn: sqlite3.Connection, project_id: int) -> list[Message]:
     rows = conn.execute("SELECT * FROM messages WHERE project_id = ? ORDER BY id",
                         (project_id,)).fetchall()
     return [Message(id=row["id"], role=row["role"], content=json.loads(row["content"]),
                     created_at=row["created_at"]) for row in rows]
+
+
+def roles(conn: sqlite3.Connection, project_id: int) -> list[Role]:
+    rows = conn.execute("SELECT name, description FROM roles WHERE project_id = ? ORDER BY position",
+                        (project_id,)).fetchall()
+    return [Role(**dict(row)) for row in rows]
+
+
+def replace_roles(conn: sqlite3.Connection, project_id: int, new_roles: list[Role]) -> None:
+    """Store the user's confirmed roles, dropping duplicate names (case-insensitive)."""
+    seen: set[str] = set()
+    unique = [r for r in new_roles if not (r.name.casefold() in seen or seen.add(r.name.casefold()))]
+    conn.execute("DELETE FROM roles WHERE project_id = ?", (project_id,))
+    conn.executemany(
+        "INSERT INTO roles (project_id, name, description, position) VALUES (?, ?, ?, ?)",
+        [(project_id, r.name, r.description, i) for i, r in enumerate(unique)])
+    touch(conn, project_id)
+
+
+def clarifications(conn: sqlite3.Connection, project_id: int) -> list[Clarification]:
+    rows = conn.execute("SELECT question, answer FROM clarifications WHERE project_id = ? ORDER BY id",
+                        (project_id,)).fetchall()
+    return [Clarification(**dict(row)) for row in rows]
+
+
+def add_clarification(conn: sqlite3.Connection, project_id: int, message_id: int | None,
+                      question: str, answer: str | None) -> None:
+    conn.execute(
+        "INSERT INTO clarifications (project_id, message_id, question, answer, created_at) "
+        "VALUES (?, ?, ?, ?, ?)", (project_id, message_id, question, answer, db.now()))
 
 
 def resume(project: Project, history: list[Message]) -> Resume:
@@ -140,7 +195,8 @@ def resume(project: Project, history: list[Message]) -> Resume:
 def state(conn: sqlite3.Connection, project_id: int) -> ProjectState:
     project = get(conn, project_id)
     history = messages(conn, project_id)
-    return ProjectState(project=project, messages=history, resume=resume(project, history))
+    return ProjectState(project=project, roles=roles(conn, project_id), messages=history,
+                        resume=resume(project, history))
 
 
 # --- API -----------------------------------------------------------------

@@ -45,7 +45,15 @@ def build_prompt(task: Task, payload: dict[str, Any], feedback: str | None = Non
 
 
 async def run_task(task: Task[T], payload: dict[str, Any],
-                   provider: Provider | None = None) -> T:
+                   provider: Provider | None = None,
+                   check: Callable[[T], str | None] | None = None) -> T:
+    """Run a task and return its validated answer.
+
+    `check` is a soft, state-aware rule on top of the shape: a problem it
+    reports is sent back for one retry, but if the model insists the answer is
+    returned anyway and the caller applies its own fallback. Shape errors are
+    hard: they never reach the caller.
+    """
     provider = provider or providers.get()
     schema = strict_schema(task.response)
     feedback = None
@@ -54,7 +62,11 @@ async def run_task(task: Task[T], payload: dict[str, Any],
                             mock_answer=lambda: task.mock(payload))
         try:
             answer = await provider.run(request)
-            return task.response.model_validate(answer)
+            result = task.response.model_validate(answer)
+            problem = check(result) if check else None
+            if problem is None or attempt == 2:
+                return result
+            feedback = f"- {problem}"
         except ValidationError as exc:
             feedback = _describe(exc)
         except AIError as exc:
