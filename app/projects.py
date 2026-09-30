@@ -38,6 +38,7 @@ class _Stripped(BaseModel):
 class ProjectIn(_Stripped):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
+    idea: str = Field(default="", max_length=4000)  # the client's idea, pre-filled for the first message
 
 
 class ProjectPatch(_Stripped):
@@ -54,6 +55,7 @@ class Project(BaseModel):
     step: Step
     current_story_id: int | None = None
     mvp_count: int | None = None
+    draft_idea: str = ""
     created_at: str
     updated_at: str
 
@@ -97,8 +99,8 @@ def create(conn: sqlite3.Connection, data: ProjectIn) -> Project:
     stamp = db.now()
     with conn:
         cur = conn.execute(
-            "INSERT INTO projects (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            (data.name, data.description, stamp, stamp))
+            "INSERT INTO projects (name, description, draft_idea, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?)", (data.name, data.description, data.idea, stamp, stamp))
     return get(conn, cur.lastrowid)
 
 

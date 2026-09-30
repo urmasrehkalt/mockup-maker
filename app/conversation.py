@@ -365,6 +365,8 @@ def apply_input(conn: sqlite3.Connection, project_id: int, data: Any) -> project
         elif data.kind == "next" and data.step:
             conn.execute("UPDATE projects SET step = ? WHERE id = ?", (data.step, project_id))
 
+    if data.kind == "text":
+        conn.execute("UPDATE projects SET draft_idea = '' WHERE id = ?", (project_id,))  # it was sent
     projects.add_message(conn, project_id, "user", {"input": data.model_dump()})
     return open_question(projects.messages(conn, project_id))
 

@@ -511,6 +511,7 @@ function composer(state, send, pending) {
   const hint = start ? "chat.idea_hint" : refining ? "chat.refinement_hint" : "chat.free_hint";
   const box = h("textarea", { rows: start ? 3 : 2, maxlength: 4000, disabled: pending,
     placeholder: t(hint), "aria-label": t(hint) });
+  if (start && state.project.draft_idea) box.value = state.project.draft_idea; // from a template, still editable
   const submit = () => {
     const text = box.value.trim();
     if (text) send({ kind: "text", text });

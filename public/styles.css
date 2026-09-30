@@ -686,3 +686,9 @@ dialog.mockup-editor { width: min(1400px, calc(100vw - 24px)); max-height: calc(
 .swatches { display: flex; gap: 4px; }
 .swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; background: var(--swatch); border: 2px solid transparent; }
 .swatch[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface) inset; }
+
+/* --- project templates ------------------------------------------------ */
+
+.template-row { margin-top: 0; }
+.template-row select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font: inherit; color: inherit; }
+.new-project .save-template { width: 100%; margin-top: 8px; border-style: dashed; color: var(--muted); }

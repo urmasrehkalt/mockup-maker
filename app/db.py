@@ -149,6 +149,17 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE mockup_versions ADD COLUMN annotations TEXT NOT NULL DEFAULT '[]';
     """,
+    # 12: project templates saved by the user, and a project's not-yet-sent first idea
+    """
+    CREATE TABLE prompt_templates (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        idea        TEXT NOT NULL,
+        created_at  TEXT NOT NULL
+    );
+    ALTER TABLE projects ADD COLUMN draft_idea TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 
