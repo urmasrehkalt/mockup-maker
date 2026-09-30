@@ -73,3 +73,29 @@ def codex_binary() -> str | None:
 def codex_home() -> str | None:
     """Codex reads its ChatGPT login from here; `--ignore-user-config` still honours it."""
     return os.environ.get("CODEX_HOME", "").strip() or None
+
+
+def tracker_url() -> str | None:
+    """The Agile Tracker's API base, reached by the server (e.g. http://127.0.0.1:8000).
+    Unset: the push is not offered."""
+    return os.environ.get("TRACKER_URL", "").strip().rstrip("/") or None
+
+
+def tracker_public_url() -> str | None:
+    """Where people open the tracker in a browser, for links; optional."""
+    return os.environ.get("TRACKER_PUBLIC_URL", "").strip().rstrip("/") or None
+
+
+def tracker_points() -> dict[str, int]:
+    """Story size to tracker points, from e.g. TRACKER_POINTS="S=2,M=5,L=8"."""
+    points = {"S": 2, "M": 5, "L": 8}
+    for pair in os.environ.get("TRACKER_POINTS", "").split(","):
+        size, _, value = pair.partition("=")
+        if size.strip().upper() in points and value.strip().isdigit():
+            points[size.strip().upper()] = int(value)
+    return points
+
+
+def tracker_timeout() -> int:
+    raw = os.environ.get("TRACKER_TIMEOUT", "").strip()
+    return int(raw) if raw.isdigit() and int(raw) > 0 else 10

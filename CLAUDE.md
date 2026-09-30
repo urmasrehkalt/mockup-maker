@@ -31,6 +31,9 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   split/merge/update so it is checked and undoable
 - `app/testability.py`: the one rule-based criteria check (evaluative / multiple / vague, ET+EN);
   the frontend never re-implements it, it calls `POST /api/criteria/check`
+- `app/tracker.py` + `app/mockup_png.py`: one-way push to the Agile Tracker through its API only
+  (it forbids unknown fields; `tracker_links` makes re-pushes update). Mockups go as PNG from a
+  small Pillow layout engine; tests use `FakeTracker` in tests/test_tracker.py, never a live tracker
 - `app/ai/`: AI layer. `providers.py` runs `codex exec` on a ChatGPT subscription (ported
   from acupoint) or `mock`/`off`; `schema.py` turns a Pydantic model into a strict
   `--output-schema`; `tasks.py` `run_task()` validates every answer and retries once.

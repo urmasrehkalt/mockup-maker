@@ -46,6 +46,10 @@ määratud väärtus on tähtsam kui `.env` failis olev.
 | `AI_TIMEOUT` | `180` | sekundid enne Codexi protsessi katkestamist |
 | `CODEX_BIN` | PATH-ist | Codex CLI absoluutne tee |
 | `CODEX_HOME` | `~/.codex` | Codexi sisselogimise kaust |
+| `TRACKER_URL` | tühi | Agile Trackeri API aadress serveri jaoks; tühjana saatmist ei pakuta |
+| `TRACKER_PUBLIC_URL` | tühi | Trackeri aadress brauseris (linkideks) |
+| `TRACKER_POINTS` | `S=2,M=5,L=8` | loo suurus → trackeri punktid |
+| `TRACKER_TIMEOUT` | `10` | sekundid ühe trackeri päringu kohta |
 
 ## AI ühendamine (ChatGPT tellimus)
 

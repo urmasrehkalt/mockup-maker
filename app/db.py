@@ -135,6 +135,16 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE projects ADD COLUMN mvp_count INTEGER;
     """,
+    # 10: what was sent to the Agile Tracker, so a second push updates instead of duplicating
+    """
+    ALTER TABLE projects ADD COLUMN tracker_project_id INTEGER;
+    CREATE TABLE tracker_links (
+        story_id          INTEGER PRIMARY KEY REFERENCES stories(id) ON DELETE CASCADE,
+        tracker_story_id  INTEGER NOT NULL,
+        mockup_hash       TEXT,
+        pushed_at         TEXT NOT NULL
+    );
+    """,
 ]
 
 

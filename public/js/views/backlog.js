@@ -10,6 +10,7 @@ import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 import { openStoryEditor } from "./story-editor.js";
+import { openTrackerDialog, trackerStatus } from "./tracker.js";
 
 const MVP = "mvp";
 
@@ -70,8 +71,17 @@ export function backlogPanel(state, reload, review) {
       : h("p", { class: "muted" }, t("backlog.empty")),
     stories.length ? h("div", { class: "backlog-foot" },
       h("button", { type: "button", class: "small review-button", onclick: review }, `✦ ${t("review.button")}`),
+      trackerButton(state, reload),
       hasLine ? null : h("button", { type: "button", class: "small add-mvp",
         onclick: () => commit(moved(MVP, Math.min(3, stories.length))) }, `+ ${t("backlog.add_mvp")}`)) : null);
+}
+
+// Shown once the server confirms a tracker is configured.
+function trackerButton(state, reload) {
+  const button = h("button", { type: "button", class: "small", hidden: true,
+    onclick: () => openTrackerDialog(state, reload) }, `↗ ${t("tracker.button")}`);
+  trackerStatus().then((s) => { button.hidden = !s.configured; });
+  return button;
 }
 
 const warned = (story) => story.criteria.filter((c) => c.issues.length).length;
@@ -109,6 +119,7 @@ function storyRow(story, index, count, edit, commit, moved, current) {
         story.mockup_ids.length ? h("span", { class: "muted", title: t("mockup.section") }, t("backlog.mockup_count", { count: story.mockup_ids.length })) : null,
         story.open_questions.length ? h("span", { class: "open-q" }, `? ${story.open_questions.length}`) : null,
         story.status !== "ready" && !story.readiness.length ? h("span", { class: "dor-ok", title: t("ready.summary_ok") }, "DoR ✓") : null,
+        story.tracker_id ? h("span", { class: "muted", title: t("tracker.already", { id: story.tracker_id }) }, `↗ #${story.tracker_id}`) : null,
         h("span", { class: "origin", title: t(`backlog.origin.${story.origin}`) }, story.origin === "ai" ? "AI" : "✎")),
       h("span", { class: "story-title" }, story.title)),
     moveButtons(story.key, index, count, story.id, commit, moved));

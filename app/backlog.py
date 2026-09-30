@@ -131,6 +131,7 @@ class Story(StoryParts):
     mockup_ids: list[int]
     needs_view: bool
     in_mvp: bool = False
+    tracker_id: int | None = None
     readiness: list[Missing] = []
     open_questions: list[str]
     notes: str
@@ -179,10 +180,14 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
             "SELECT l.story_id, l.mockup_id FROM story_mockups l JOIN stories s ON s.id = l.story_id "
             "WHERE s.project_id = ? ORDER BY l.mockup_id", (project_id,)):
         links.setdefault(row["story_id"], []).append(row["mockup_id"])
+    tracked = {row["story_id"]: row["tracker_story_id"] for row in conn.execute(
+        "SELECT t.story_id, t.tracker_story_id FROM tracker_links t JOIN stories s ON s.id = t.story_id "
+        "WHERE s.project_id = ?", (project_id,))}
     result = []
     for index, row in enumerate(rows):
         data = dict(row)
         data["in_mvp"] = mvp_count is not None and index < mvp_count
+        data["tracker_id"] = tracked.get(row["id"])
         data["open_questions"] = json.loads(data["open_questions"])
         data["needs_view"] = bool(data["needs_view"])
         parts = StoryParts(**{k: data[k] for k in StoryParts.model_fields})
@@ -282,9 +287,12 @@ def _dump(conn: sqlite3.Connection, project_id: int) -> str:
     newest_mockup = conn.execute("SELECT COALESCE(MAX(id), 0) FROM mockups WHERE project_id = ?",
                                  (project_id,)).fetchone()[0]
     mvp_count = conn.execute("SELECT mvp_count FROM projects WHERE id = ?", (project_id,)).fetchone()[0]
+    tracker_rows = [dict(r) for r in conn.execute(
+        "SELECT t.* FROM tracker_links t JOIN stories s ON s.id = t.story_id WHERE s.project_id = ?",
+        (project_id,))]
     return json.dumps({"stories": story_rows, "criteria": criteria_rows, "links": link_rows,
                        "mockup_versions": versions, "newest_mockup": newest_mockup,
-                       "mvp_count": mvp_count}, ensure_ascii=False)
+                       "mvp_count": mvp_count, "tracker_links": tracker_rows}, ensure_ascii=False)
 
 
 def record_undo(conn: sqlite3.Connection, project_id: int, action: str,
@@ -344,6 +352,10 @@ def undo(conn: sqlite3.Connection, project_id: int) -> Undo:
         conn.execute("DELETE FROM story_mockups WHERE story_id IN "
                      "(SELECT id FROM stories WHERE project_id = ?)", (project_id,))
         _restore_mockups(conn, project_id, before)
+        for tracked in before.get("tracker_links", []):
+            conn.execute("INSERT OR REPLACE INTO tracker_links (story_id, tracker_story_id, mockup_hash, "
+                         "pushed_at) VALUES (?, ?, ?, ?)", (tracked["story_id"], tracked["tracker_story_id"],
+                                                           tracked["mockup_hash"], tracked["pushed_at"]))
         if "mvp_count" in before:
             conn.execute("UPDATE projects SET mvp_count = ? WHERE id = ?", (before["mvp_count"], project_id))
         conn.executemany("INSERT OR IGNORE INTO story_mockups (story_id, mockup_id) "

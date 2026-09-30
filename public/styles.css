@@ -637,3 +637,14 @@ dialog.grooming select { width: 100%; padding: 8px 10px; border-radius: 8px; bor
   .kind { background: #3b2f10; color: #f0c45b; }
   .kind-overlap, .kind-too_large { background: #172a4d; color: #8fb3ff; }
 }
+
+/* --- tracker push ----------------------------------------------------- */
+
+.push-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; max-height: 50vh; overflow: auto; }
+.push-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.push-results .created strong, .push-results .updated strong { color: var(--ok); }
+.push-results .failed strong { color: var(--error); }
+.push-results .skipped strong { color: var(--warn); }
+a.button-link { display: inline-block; padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px;
+  color: inherit; text-decoration: none; font-size: 0.85rem; }
+a.button-link:hover { border-color: var(--accent); }
