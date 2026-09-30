@@ -190,7 +190,14 @@ label { display: block; font-size: 0.875rem; font-weight: 600; margin: 12px 0 4p
 .step.current { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
 .step.current .step-number { background: var(--accent-text); color: var(--accent); }
 
-.conversation { padding: 16px; display: grid; gap: 14px; max-width: 760px; }
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+.conversation { padding: 16px; display: grid; gap: 14px; min-width: 0; }
 
 .message { max-width: 90%; }
 .message.user { justify-self: end; background: var(--surface-2); padding: 10px 12px; border-radius: 10px; }
@@ -247,6 +254,64 @@ label { display: block; font-size: 0.875rem; font-weight: 600; margin: 12px 0 4p
 }
 .composer textarea { flex: 1; }
 .notice.error p { margin-bottom: 8px; }
+
+/* --- stories and backlog --------------------------------------------- */
+
+.story-cards { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; counter-reset: story; }
+.story-cards li {
+  counter-increment: story;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.story-check { align-items: flex-start; padding: 0; }
+.story-check input { margin-top: 4px; }
+.story-check > span::before {
+  content: counter(story) ". ";
+  font-weight: 700;
+  color: var(--muted);
+}
+.story-role {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.quiet-button { border-style: dashed; color: var(--muted); margin-right: auto; }
+
+.backlog { padding: 16px; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.panel-head h2 { margin: 0 0 12px; }
+.count { font-size: 0.8rem; color: var(--muted); }
+
+.story-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.story-row { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.story-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.75rem; margin-bottom: 4px; }
+.story-key { font-weight: 700; }
+.story-title { margin: 0; font-size: 0.9rem; }
+.origin { margin-left: auto; color: var(--muted); font-weight: 600; }
+.size { padding: 0 6px; border-radius: 4px; border: 1px solid var(--border); font-weight: 700; }
+
+.status { padding: 1px 8px; border-radius: 999px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+.status-needs_clarification { background: #fff4d6; color: #7a5200; }
+.status-reviewed { background: #e3ecff; color: #1f4fbf; }
+.status-ready { background: #dcf5e3; color: #146c2e; }
+
+@media (prefers-color-scheme: dark) {
+  .status-needs_clarification { background: #3b2f10; color: #f0c45b; }
+  .status-reviewed { background: #172a4d; color: #8fb3ff; }
+  .status-ready { background: #123821; color: #6fdc8c; }
+}
+
+@media (max-width: 960px) {
+  .workspace { grid-template-columns: 1fr; }
+  .backlog { position: static; max-height: none; }
+}
 
 @media (max-width: 760px) {
   .projects-page { grid-template-columns: 1fr; }

@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
+import { backlogPanel } from "./backlog.js";
 import { conversation } from "./chat.js";
 
 const STEPS = ["idea", "roles", "stories", "priorities", "criteria", "refinements", "grooming"];
@@ -78,7 +79,9 @@ class ProjectPage {
         h("h1", {}, project.name),
         project.description ? h("p", { class: "muted" }, project.description) : null),
       stepBar(project.step, (step) => this.goTo(step), this.pending),
-      conversation(this.state, (input) => this.send(input), { pending: this.pending, error: this.error }));
+      h("div", { class: "workspace" },
+        conversation(this.state, (input) => this.send(input), { pending: this.pending, error: this.error }),
+        backlogPanel(this.state)));
     this.view.querySelector(".step.current")?.scrollIntoView({ block: "nearest", inline: "center" });
     const end = this.view.querySelector(".composer");
     if (this.state.messages.length) end?.scrollIntoView({ block: "end" });

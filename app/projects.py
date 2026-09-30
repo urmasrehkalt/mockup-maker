@@ -14,7 +14,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import db
+from . import backlog, db
 
 Step = Literal["idea", "roles", "stories", "priorities", "criteria", "refinements", "grooming"]
 STEPS: tuple[str, ...] = Step.__args__
@@ -81,6 +81,7 @@ class Clarification(BaseModel):
 class ProjectState(BaseModel):
     project: Project
     roles: list[Role]
+    stories: list[backlog.Story]
     messages: list[Message]
     resume: Resume
 
@@ -120,8 +121,7 @@ def update(conn: sqlite3.Connection, project_id: int, patch: ProjectPatch) -> Pr
     return get(conn, project_id)
 
 
-def touch(conn: sqlite3.Connection, project_id: int) -> None:
-    conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (db.now(), project_id))
+touch = db.touch_project
 
 
 def add_message(conn: sqlite3.Connection, project_id: int, role: str,
@@ -195,7 +195,8 @@ def resume(project: Project, history: list[Message]) -> Resume:
 def state(conn: sqlite3.Connection, project_id: int) -> ProjectState:
     project = get(conn, project_id)
     history = messages(conn, project_id)
-    return ProjectState(project=project, roles=roles(conn, project_id), messages=history,
+    return ProjectState(project=project, roles=roles(conn, project_id),
+                        stories=backlog.stories(conn, project_id), messages=history,
                         resume=resume(project, history))
 
 

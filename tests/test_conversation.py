@@ -13,9 +13,11 @@ class Recorder:
 
     def __init__(self, override=None):
         self.payloads = []
+        self.prompts = []
         self.override = override
 
     async def run(self, request):
+        self.prompts.append(request.prompt)
         payload = json.loads(request.prompt.split("INPUT (JSON):\n", 1)[1].split("\n\nYour previous")[0])
         self.payloads.append(payload)
         if self.override:

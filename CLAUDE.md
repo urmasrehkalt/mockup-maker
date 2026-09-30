@@ -15,6 +15,8 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
 - `app/db.py`: connections and migrations
 - `app/projects.py`: projects, conversation messages, current step and the resume
   suggestion (deterministic from step and history, so it works with AI off)
+- `app/backlog.py`: stories. Connextra parts stored separately (`role_name`, `role_phrase` =
+  Estonian essive as the title starts, `action`, `benefit`); the title is always composed, never stored
 - `app/conversation.py`: guided conversation, one `POST /turn` per user input. User decisions
   (answers, roles, notes) are stored before the AI call; the AI payload is built from DB state;
   `check_turn` holds state-aware rules (question minimum/cap) retried via `run_task(check=...)`

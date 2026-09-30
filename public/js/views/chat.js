@@ -42,8 +42,8 @@ function author(role) {
 
 function userMessage(message) {
   const input = message.content.input ?? {};
-  // Answers and role choices are shown on the card they answer.
-  if (input.kind === "answer" || input.kind === "roles") return null;
+  // Answers, role choices and added stories are shown on the card they answer.
+  if (["answer", "roles", "stories"].includes(input.kind)) return null;
   let text;
   switch (input.kind) {
     case "text": text = input.text; break;
@@ -60,6 +60,7 @@ function assistantMessage(message, live, send, state) {
     h("p", {}, c.text),
     c.question ? questionCard(message, live, send) : null,
     c.roles ? rolesCard(message, live, send, state) : null,
+    c.stories ? storiesCard(message, live, send) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
 }
 
@@ -159,6 +160,49 @@ function rolesCard(message, live, send, state) {
     list, addForm, status,
     h("div", { class: "card-actions" },
       h("button", { type: "button", class: "primary", onclick: confirm }, t("chat.confirm_roles"))));
+}
+
+// --- stories -------------------------------------------------------------
+
+function storyTitle(story) {
+  const phrase = story.role_phrase.charAt(0).toUpperCase() + story.role_phrase.slice(1);
+  return t("story.title", { role: phrase, action: story.action, benefit: story.benefit.replace(/\.$/, "") });
+}
+
+function storiesCard(message, live, send) {
+  const c = message.content;
+  if (c.stories_added || !live) {
+    const added = c.stories_added?.keys ?? [];
+    return h("div", { class: "card-block answered" },
+      h("div", { class: "card-title" }, t("chat.stories_title", { count: c.stories.length })),
+      h("p", { class: "muted" }, added.length ? t("chat.stories_added", { keys: added.join(", ") }) : t("chat.stories_not_added")));
+  }
+
+  const boxes = c.stories.map(() => h("input", { type: "checkbox", checked: true }));
+  const addSelected = h("button", { type: "button" }, t("chat.add_selected"));
+  const refresh = () => {
+    const count = boxes.filter((b) => b.checked).length;
+    addSelected.disabled = count === 0;
+    addSelected.textContent = t("chat.add_selected_count", { count });
+  };
+  boxes.forEach((b) => b.addEventListener("change", refresh));
+  refresh();
+  addSelected.addEventListener("click", () => send({ kind: "stories", message_id: message.id,
+    selected: boxes.flatMap((b, i) => (b.checked ? [i] : [])) }));
+
+  return h("div", { class: "card-block" },
+    h("div", { class: "card-title" }, t("chat.stories_title", { count: c.stories.length })),
+    h("ol", { class: "story-cards" }, c.stories.map((story, i) => h("li", {},
+      h("label", { class: "check story-check" }, boxes[i],
+        h("span", {}, h("span", { class: "story-role" }, story.role_name), storyTitle(story)))))),
+    h("div", { class: "card-actions" },
+      h("button", { type: "button", class: "quiet-button",
+        onclick: () => send({ kind: "next", label: t("chat.suggest_different"), step: "stories" }) },
+        t("chat.suggest_different")),
+      addSelected,
+      h("button", { type: "button", class: "primary", onclick: () =>
+        send({ kind: "stories", message_id: message.id, selected: c.stories.map((_, i) => i) }) },
+        t("chat.add_all"))));
 }
 
 // --- next steps, resume, errors, composer --------------------------------

@@ -48,6 +48,29 @@ MIGRATIONS: list[str] = [
         created_at  TEXT NOT NULL
     );
     """,
+    # 3: the backlog
+    """
+    CREATE TABLE stories (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id     INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        number         INTEGER NOT NULL,
+        role_name      TEXT NOT NULL,
+        role_phrase    TEXT NOT NULL,
+        action         TEXT NOT NULL,
+        benefit        TEXT NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'idea'
+                       CHECK (status IN ('idea', 'needs_clarification', 'reviewed', 'ready')),
+        position       INTEGER NOT NULL,
+        size           TEXT CHECK (size IN ('S', 'M', 'L')),
+        origin         TEXT NOT NULL CHECK (origin IN ('ai', 'manual')),
+        open_questions TEXT NOT NULL DEFAULT '[]',
+        notes          TEXT NOT NULL DEFAULT '',
+        created_at     TEXT NOT NULL,
+        updated_at     TEXT NOT NULL,
+        UNIQUE (project_id, number)
+    );
+    CREATE INDEX stories_by_project ON stories(project_id, position);
+    """,
 ]
 
 
@@ -72,6 +95,11 @@ def get_db():
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def touch_project(conn: sqlite3.Connection, project_id: int) -> None:
+    """Mark a project as changed, so the project list shows it first."""
+    conn.execute("UPDATE projects SET updated_at = ? WHERE id = ?", (now(), project_id))
 
 
 def init(path: Path | None = None) -> None:
