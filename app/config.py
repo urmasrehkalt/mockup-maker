@@ -33,7 +33,9 @@ def database_path() -> Path:
 
 
 AI_PROVIDERS = ("codex", "mock", "off")
-DEFAULT_AI_MODEL = "gpt-6-astra"
+# Chosen from a three-model acceptance run (#25): fastest at every step, review well inside the timeout.
+DEFAULT_AI_MODEL = "gpt-6-luna"
+DEFAULT_AI_REASONING = "medium"
 DEFAULT_AI_TIMEOUT = 180
 
 
@@ -51,9 +53,9 @@ def ai_model() -> str:
 
 
 def ai_reasoning() -> str:
-    """Codex `model_reasoning_effort`. `low` keeps a guided conversation responsive."""
-    value = os.environ.get("AI_REASONING", "low").strip().lower()
-    return value if value in ("low", "medium", "high") else "low"
+    """Codex `model_reasoning_effort` (`low`, `medium` or `high`)."""
+    value = os.environ.get("AI_REASONING", DEFAULT_AI_REASONING).strip().lower()
+    return value if value in ("low", "medium", "high") else DEFAULT_AI_REASONING
 
 
 def ai_timeout() -> int:

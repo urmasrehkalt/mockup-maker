@@ -41,8 +41,8 @@ määratud väärtus on tähtsam kui `.env` failis olev.
 | `DATABASE_PATH` | `data/mockup-maker.db` | SQLite faili asukoht |
 | `PORT` | `8010` | port, mida `./start.sh` kasutab |
 | `AI_PROVIDER` | `mock` | `codex` (ChatGPT tellimus Codex CLI kaudu), `mock` või `off` |
-| `AI_MODEL` | `gpt-6-astra` | Codexi mudel |
-| `AI_REASONING` | `low` | `low`, `medium` või `high` |
+| `AI_MODEL` | `gpt-6-luna` | Codexi mudel |
+| `AI_REASONING` | `medium` | `low`, `medium` või `high` |
 | `AI_TIMEOUT` | `180` | sekundid enne Codexi protsessi katkestamist |
 | `CODEX_BIN` | PATH-ist | Codex CLI absoluutne tee |
 | `CODEX_HOME` | `~/.codex` | Codexi sisselogimise kaust |

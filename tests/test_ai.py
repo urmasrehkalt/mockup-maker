@@ -152,6 +152,20 @@ def test_ai_provider_defaults_to_mock(monkeypatch):
     assert config.ai_provider() == "mock"
 
 
+def test_default_model_is_luna_at_medium_effort(monkeypatch):
+    monkeypatch.delenv("AI_MODEL", raising=False)
+    monkeypatch.delenv("AI_REASONING", raising=False)
+    assert (config.ai_model(), config.ai_reasoning()) == ("gpt-6-luna", "medium")
+
+
+def test_model_and_effort_can_be_set_and_bad_effort_falls_back(monkeypatch):
+    monkeypatch.setenv("AI_MODEL", "gpt-6.1-sol")
+    monkeypatch.setenv("AI_REASONING", "LOW")
+    assert (config.ai_model(), config.ai_reasoning()) == ("gpt-6.1-sol", "low")
+    monkeypatch.setenv("AI_REASONING", "extreme")
+    assert config.ai_reasoning() == "medium"
+
+
 def test_invalid_ai_provider_is_rejected(monkeypatch):
     monkeypatch.setenv("AI_PROVIDER", "codx")
     with pytest.raises(ValueError):
