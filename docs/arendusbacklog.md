@@ -1,0 +1,49 @@
+# Arendustöö backlog
+
+Rakenduse arendustöö on jagatud kasutajalugudeks, millest igaüks on GitHubis eraldi issue koos vastuvõtukriteeriumidega (<https://github.com/urmasrehkalt/mockup-maker/issues>). Allpool on backlog järjekorras koos peamiste kriteeriumide, seisu ja MVP joonega. Iga lugu arendati eraldi harus, testiti automaattestidega ning kontrolliti brauseris ja reaalse AI-ga enne `main`-i ühendamist.
+
+## Järjestuse põhjendus
+
+Ülesanne nõuab, et esmalt töötaks terviklik töövoog lihtsal kujul: projekt, juhitud vestlus pakub lood, lugu jõuab backlog'i, lool on mockup ja kriteeriumid, kliendi täpsustus uuendab lugu ja mockup'i. Seepärast on MVP joonest ülalpool just need lood, mis selle ahela moodustavad, ja nende omavahelise järjekorra määravad sõltuvused.
+
+1. **Alus enne sisu (1–3).** Projekti skelett, AI-kiht ja projektid on kõige muu eeldus. AI-kiht tehti vara, sest kogu vestlus sõltub sellest, kas struktureeritud vastused on usaldusväärsed. Kui see poleks ChatGPT tellimusega töötanud, oleks pidanud lahendust muutma enne muu ehitamist.
+2. **Vestlus töövoo järjekorras (4–7).** Täpsustavad küsimused ja rollid, siis lood, siis käsitsi haldus ja lõpuks prioriteet. Käsitsi haldus (6) on enne prioriteeti, sest backlog peab jääma kasutaja kontrolli alla ka siis, kui AI pole kättesaadav.
+3. **Visuaalne kontroll (8–12).** Mockup'i komponendid ja renderdaja tulid enne kriteeriume, sest kriteeriumid viitavad mockup'i elementidele. Kontrollitavuse reegel (10) tuli kohe kriteeriumide järel, kliendi täpsustus (11) ja versioonid (12) sulgesid ahela.
+4. **Vastuvõtukatse ülejäänud osad (13–15).** Valmisoleku definitsioon, käsitsi groomimine ja AI ülevaatus on vastuvõtukatses nõutud, seega need tulid kohe pärast MVP-d.
+5. **Täiendused (16–20).** Trackerisse saatmine, mockup'i redaktor, märkmed, mallid ja kakskeelsus. Need muudavad tööriista praktilisemaks, kuid põhitöövoog toimib ka ilma nendeta.
+6. **Väljaspool esimest versiooni (21–23).** Serverisse paigaldus lükati edasi, sest rakendus töötab praegu autori arvutis. Lisavõimalused ja esitamisdokumendid on viimased.
+
+## Backlog
+
+| Nr | Kasutajalugu | Peamised kriteeriumid | Seis |
+| --- | --- | --- | --- |
+| #1 | Arendajana soovin käivitatavat projekti skeletti, et igal järgneval lool oleks testitud koht, kuhu areneda. | `./start.sh` loob keskkonna ja käivitab serveri; `/api/health` vastab; SQLite fail luuakse esimesel käivitusel; `.env.example` ja README on olemas | Valmis |
+| #2 | Arendajana soovin, et kõik AI päringud käiksid läbi ühe serveripoolse kihi, et võti jääks serverisse ja iga vastus oleks enne kasutajani jõudmist kontrollitud. | Codex (ChatGPT tellimus), `mock` ja `off`; vastus kontrollitakse skeemi järgi; vigane vastus proovitakse üks kord uuesti; aegumisel katkestatakse protsess | Valmis |
+| #3 | Projektijuhina soovin projekte luua ja hiljem uuesti avada, et saaksin jätkata täpselt sealt, kus kohtumine pooleli jäi. | Projektil on nimi ja kirjeldus; loend näitab viimast muudatust; avamisel taastub vestlus ja etapp; andmed säilivad serveri taaskäivitamisel | Valmis |
+| #4 | Projektijuhina soovin, et AI juhiks vestlust küsimuste ja valmis vastustega, et kliendi ähmane idee muutuks konkreetseks. | 1–3 täpsustavat küsimust nuppudega, „Muu“ ja „Jäta vahele“; rollid valitakse ja kinnitatakse; iga vastus lõpeb 1–4 järgmise sammuga; vabatekst on alati lubatud; etappide riba | Valmis |
+| #5 | Projektijuhina soovin, et AI pakuks lood happy path'i järjekorras kaartidena, et saaksin õiged lood mõne klõpsuga backlog'i lisada. | Vähemalt 5 lugu põhitöövoo järjekorras; „Lisa kõik“, „Lisa valitud“, „Paku teistsuguseid“; osad salvestatakse eraldi, päritolu `ai` | Valmis |
+| #6 | Projektijuhina soovin lugusid käsitsi hallata, et backlog jääks minu kontrolli alla ka siis, kui AI pole kättesaadav. | Lisamine, muutmine, kustutamine; lohistamine; viimase muudatuse tagasivõtmine; töötab `AI_PROVIDER=off` korral | Valmis |
+| #7 | Projektijuhina soovin, et AI soovitaks põhjendusega, millisest loost alustada, et klient saaks kiiresti otsustada. | Soovitus koos põhjusega; „Nõus“ ja „Valin ise teise“; valitud lugu saab kriteeriumide ja mockup'i aluseks | Valmis |
+| #8 | Projektijuhina soovin, et mockup'id koosneksid kindlatest raamkomponentidest, et neid oleks kiire koostada ja turvaline kuvada. | Vähemalt 14 komponenti ja 5 malli; server kontrollib puud ja lükkab tundmatud komponendid tagasi; tekst kuvatakse alati tekstina; igal komponendil on püsiv id | Valmis |
+| #9 | Projektijuhina soovin, et AI pakuks valitud loole kriteeriumid ja mockup'i, et klient saaks lugu visuaalselt kontrollida. | Iga kriteeriumi juures „Nõus“, „Muuda“, „Eemalda“; „Kinnita kõik“ ja „Lisa kriteerium“; mockup kriteeriumide kõrval; vaatega seotud kriteerium viitab mockup'i elemendile | Valmis |
+| #10 | Projektijuhina soovin hoiatust kriteeriumi kohta, millele ei saa vastata jah või ei, et backlog'is oleks ainult kontrollitavad kriteeriumid. | Hinnangulised sõnad, mitu tingimust ühes ja ebamäärane sõnastus annavad hoiatuse; AI kontrollib oma kriteeriume; ülesande näited on testides | Valmis |
+| #11 | Projektijuhina soovin kliendi täpsustuse sisestada ja muudatuse eelvaadet näha, et midagi ei muutuks ilma minu kinnituseta. | Ettepanek hõlmab mockup'i, sõnastust ja kriteeriume; eelvaade enne ja pärast; „Rakenda“, „Muuda“, „Loobu“; server ei muuda teisi lugusid; teised mõjutatud lood pakutakse eraldi | Valmis |
+| #12 | Projektijuhina soovin mockup'i varasemaid versioone alles hoida, et saaksin tagasi minna, kui klient meelt muudab. | Iga muudatus loob versiooni; versioone saab eelvaadata; varasema taastamine loob uusima versiooni | Valmis |
+| | **MVP joon** | | |
+| #13 | Projektijuhina soovin, et staatust „Valmis arenduseks“ saaks anda ainult valmisoleku definitsioonile vastavale loole, et arendajad saaksid ainult terviklikke lugusid. | Connextra vorm, vähemalt 3 kontrollitavat kriteeriumi, vaatega lool mockup, avatud küsimusi pole; puuduv loetletakse; „Vajab täpsustamist“ nõuab avatud küsimust | Valmis |
+| #14 | Projektijuhina soovin backlog'i koos kliendiga käsitsi groomida, et lood oleksid õige suuruse ja järjekorraga. | Loo jagamine kriteeriumide jaotamisega; kattuvate ühendamine ilma korduseta; MVP joon; alguspunkti märkimine | Valmis |
+| #15 | Projektijuhina soovin AI ülevaatust kogu backlog'ist, et probleemid leitaks enne arenduse algust. | Leiab liiga suured, kattuvad, mittekontrollitavate või puuduvate kriteeriumidega, mockup'ita ja Connextra vormist erinevad lood; igal leiul „Rakenda“, „Muuda“, „Ignoreeri“ | Valmis |
+| #16 | Projektijuhina soovin lood koos mockup'i piltidega Agile Trackerisse saata, et arendustöö saaks seal jätkuda. | PNG eksport alla 5 MB; projekt, lugu ja pilt luuakse trackeri API kaudu; uuesti saatmine uuendab, ei tee koopiat; testides võlts-tracker | Valmis |
+| #17 | Projektijuhina soovin mockup'i komponente käsitsi lisada, liigutada ja muuta, et saaksin kavandit kohtumise ajal ilma AI-ta parandada. | Komponentide palett ja lohistamine; järjestamine, muutmine, kustutamine; salvestamine loob versiooni | Valmis |
+| #18 | Projektijuhina soovin mockup'ile vabalt kaste, nooli ja märkmeid joonistada, et kliendi mõtted jääksid kiiresti kirja. | Kast, nool, pliiats, märge, kustutuskumm; salvestatakse vektorandmetena versiooni juurde; on PNG ekspordis; SVG ilma HTML-ita | Valmis |
+| #19 | Projektijuhina soovin projekti mallist alustada, et esimene vestlus algaks kiiremini. | Vähemalt 3 valmismalli; oma malli salvestamine; mall täidab esimese sõnumi, mida saab muuta | Valmis |
+| #20 | Kasutajana soovin liidese keelt eesti ja inglise keele vahel vahetada, et saaksin töötada mõlemas keeles. | Kõik liidese tekstid vahetuvad; valik jääb meelde; AI vastab projekti keeles | Valmis |
+| #21 | Arendajana soovin rakenduse serverisse paigaldada, et õpetaja saaks seda aadressi kaudu kasutada. | systemd, Caddy, Codexi sisselogimine teenuse kasutajale, tracker samas masinas | Ootel |
+| #22 | Projektijuhina soovin lisavaateid ja eksporti, et backlog'i oleks lihtne jagada. | Eksport Markdowni ja CSV-sse; kriteeriumile osutamine tõstab mockup'i elemendi esile (valmis koos #9-ga); story map rollide kaupa | Osaliselt |
+| #23 | Õpilasena soovin esitamisdokumendid koostada, et ülesanne oleks terviklik. | Kasutusstsenaarium; arendustöö backlog koos järjestuse põhjendusega; ülevaade; README | Töös |
+| #24 | Arendajana soovin, et testid ei loeks arendaja `.env` faili seadeid, et testid ei jõuaks kunagi päris AI ega trackerini. | Regressioonitest; kõik testid kasutavad `mock`-pakkujat ja trackerit pole seadistatud; täiskomplekt läbib ka `.env` olemasolul | Viga, valmis |
+| #25 | Projektijuhina soovin, et vaikimisi AI mudel oleks kiireim piisava kvaliteediga mudel, et kohtumisel ei peaks ootama. | Vaikimisi `gpt-6-luna` keskmise mõtlemistasemega; `.env.example` ja README näitavad seda; valik põhineb kolme mudeli vastuvõtukatsel | Valmis |
+
+## Kuidas backlog tekkis
+
+Esimene versioon (#1–#23) koostati enne arendust GitHubi issue'dena, lähtudes ülesande nõuetest ja vastuvõtukatsest. Iga issue sisaldab kirjeldust ja kontrollitavaid kriteeriume. Arenduse käigus lisandusid viga #24, mis leiti esitamisdokumentide koostamise ajal (kohaliku `.env` faili loomise järel hakkasid testid lugema arendaja seadeid), ning #25, kus vastuvõtukatse kolme mudeliga näitas, et algne vaikimisi mudel oli liiga aeglane.

@@ -4,6 +4,45 @@ Veebirakendus, mis aitab projektijuhil muuta kliendi umbmäärase idee juhitud v
 kaudu kasutajalugudeks, vastuvõtukriteeriumideks ja mockup'ideks. AI juhib protsessi,
 inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituseta.
 
+## Dokumendid
+
+- [Kasutusstsenaarium](docs/kasutusstsenaarium.md): kuidas projektijuht rakendust avakohtumisel ja backlog'i ülevaatusel kasutab
+- [Arendustöö backlog](docs/arendusbacklog.md): rakenduse enda arendus kasutajalugudena, järjestuse põhjendus ja MVP joon
+- [Ülevaade](docs/ulevaade.md): mis töötab, mis jäi pooleli ja millised on AI teadaolevad piirangud
+- [Demo](docs/demo.md): 5–10 minuti demo käik
+
+## Mida rakendus teeb
+
+- **Projektid.** Projekt luuakse nime, kirjelduse ja sisu keelega, soovi korral mallist. Projekti avamisel jätkub töö samast kohast: vestlus, backlog, mockup'id ja protsessi etapp on alles.
+- **Juhitud vestlus.** AI küsib täpsustavaid küsimusi valmis vastustega, pakub rollid, lood happy path'i järjekorras, soovitab põhjendusega, millest alustada, ning lõpetab iga vastuse järgmiste sammudega. Vabatekst on alati lubatud ja etappide riba näitab, kus protsess on.
+- **Backlog.** Lood on Connextra kujul (roll, tegevus ja kasu eraldi), neil on kriteeriumid, staatus, suurus, avatud küsimused, mockup'id ja päritolu. Lugusid saab käsitsi lisada, muuta, lohistada ja kustutada ning viimaseid muudatusi tagasi võtta. Valmisoleku definitsioon on serveris jõustatud.
+- **Mockup'id.** Vaade on kindlatest komponentidest koosnev puu, mille rakendus ise joonistab (mitte AI-HTML). Kriteeriumid viitavad mockup'i elementidele, versioonid säilivad, mockup'i saab käsitsi redigeerida, sellele saab joonistada märkmeid ja selle saab alla laadida PNG-na.
+- **Kliendi täpsustus.** AI koostab muudatusettepaneku, mida näeb enne rakendamist eelvaatena. Server tagab, et muutub ainult valitud lugu.
+- **Groomimine.** Käsitsi jagamine, ühendamine, MVP joon ja alguspunkt ning AI ülevaatus, mille iga leiu saab rakendada, muuta või tähelepanuta jätta.
+- **Agile Tracker.** Lood saab koos mockup'i piltidega saata [Agile Trackerisse](https://github.com/urmasrehkalt/urmas-agiilne-tracker); uuesti saatmine uuendab olemasolevat lugu.
+- **Kaks keelt.** Liides on eesti ja inglise keeles, AI kirjutab projekti keeles.
+
+## Ülesehitus
+
+| Kaust / fail | Sisu |
+| --- | --- |
+| `app/main.py` | FastAPI rakendus, marsruudid ja staatilised failid |
+| `app/ai/` | AI-kiht: Codexi ja näidispakkuja, skeemi koostamine ja vastuste kontroll koos kordusega |
+| `app/conversation.py` | juhitud vestlus: üks samm ühe kasutaja sisendi kohta, reeglid ja AI juhised |
+| `app/backlog.py` | lood, kriteeriumid, tagasivõtmine, valmisoleku definitsioon, jagamine ja ühendamine |
+| `app/mockups.py`, `app/mockup_templates.py`, `app/mockup_png.py` | mockup'i komponendid ja reeglid, mallid, versioonid, märkmed ja PNG |
+| `app/review.py`, `app/testability.py` | AI ülevaatus ja kriteeriumide kontrollitavuse reegel |
+| `app/tracker.py`, `app/templates.py`, `app/projects.py`, `app/db.py` | trackerisse saatmine, projektimallid, projektid ja andmebaas (SQLite, migratsioonid) |
+| `public/` | liides: HTML, CSS ja JavaScripti moodulid ilma ehitussammuta |
+| `tests/` | automaattestid (pytest); AI ja tracker on testides asendatud |
+
+## Turvalisus
+
+- AI päringud käivad ainult serveri kaudu. Rakendus ei hoia API võtit: Codexi sisselogimine on serveri kasutaja `CODEX_HOME` kaustas, mis ei ole repositooriumis.
+- Iga AI vastus kontrollitakse serveris skeemi ja reeglite järgi enne, kui see kasutajani jõuab.
+- Mockup ei ole kunagi HTML: rakendus joonistab komponendipuu ise ja kogu tekst lisatakse tekstina, märkmed on SVG ilma HTML-ita. Seega ei saa mockup'i sisu brauseris koodi käivitada.
+- Trackeri päringud teeb server, brauser trackeriga otse ei suhtle.
+
 ## Tehnoloogiad
 
 - Python 3.12, FastAPI, Pydantic v2
@@ -81,4 +120,5 @@ ainult eesti keeles.
 .venv/bin/pytest
 ```
 
-Testid ei vaja võrku, töötavat serverit ega päris võtmeid.
+Testid ei vaja võrku, töötavat serverit ega päris võtmeid: AI ja Agile Tracker on testides
+asendatud. Andmebaas luuakse iga testi jaoks eraldi ajutisse kausta.
