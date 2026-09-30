@@ -1,3 +1,16 @@
 .DS_Store
 .env
 node_modules/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Server
+.uvicorn.log
+.uvicorn.pid
+
+# Andmed
+data/
