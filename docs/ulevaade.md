@@ -19,7 +19,7 @@ Kõik ülesande põhifunktsioonid on olemas ja kasutatavad nii ChatGPT tellimuse
 | Groomimine: jagamine, ühendamine, AI ülevaatus leidudega „Rakenda“, „Muuda“, „Ignoreeri“ | töötab | #14, #15 |
 | Turvalisus: AI ainult serveri kaudu, võtit pole repositooriumis, mockup ei käivita koodi | töötab | #2, #8, #18 |
 
-Ülesande lisavõimalustest on tehtud kriteeriumi ja mockup'i elemendi seos (kriteeriumile osutades tõstetakse element esile, #9) ning ekspordina PNG ja saatmine Agile Trackerisse (#16). Lisaks on käsitsi mockup'i redaktor (#17), vabakäe märkmed mockup'il (#18), projektimallid (#19) ja eesti- ning ingliskeelne liides (#20).
+Ülesande lisavõimalustest on tehtud backlog'i eksport Markdowni ja CSV-sse (#22), kriteeriumi ja mockup'i elemendi seos (kriteeriumile osutades tõstetakse element esile, #9), rollide kaupa story map (#22) ning mockup'i PNG eksport ja saatmine Agile Trackerisse (#16). Lisaks on käsitsi mockup'i redaktor (#17), vabakäe märkmed mockup'il (#18), projektimallid (#19) ja eesti- ning ingliskeelne liides (#20).
 
 ### Kuidas seda kontrolliti
 
@@ -61,7 +61,6 @@ Valituks sai **`gpt-6-luna` keskmise mõtlemistasemega**: see oli igas sammus ki
 ## Mis jäi pooleli
 
 - **Serverisse paigaldus (#21)** on ootel. Rakendus töötab praegu autori arvutis; paigalduse plaan (systemd teenus, Caddy, Codexi sisselogimine teenuse kasutajale, tracker samas masinas) on issue'sse kirja pandud.
-- **Lisavõimalused (#22)** on osaliselt tehtud: backlog'i eksport Markdowni ja CSV-sse ning rollide kaupa story map puuduvad.
 - **Näidisrežiim** (`AI_PROVIDER=mock`) vastab ainult eesti keeles ja lihtsate etteantud vastustega. See on testide ja AI-ta demo jaoks, mitte päris kasutuseks.
 
 ## AI teadaolevad piirangud

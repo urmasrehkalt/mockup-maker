@@ -39,8 +39,8 @@ Rakenduse arendustöö on jagatud kasutajalugudeks, millest igaüks on GitHubis 
 | #19 | Projektijuhina soovin projekti mallist alustada, et esimene vestlus algaks kiiremini. | Vähemalt 3 valmismalli; oma malli salvestamine; mall täidab esimese sõnumi, mida saab muuta | Valmis |
 | #20 | Kasutajana soovin liidese keelt eesti ja inglise keele vahel vahetada, et saaksin töötada mõlemas keeles. | Kõik liidese tekstid vahetuvad; valik jääb meelde; AI vastab projekti keeles | Valmis |
 | #21 | Arendajana soovin rakenduse serverisse paigaldada, et õpetaja saaks seda aadressi kaudu kasutada. | systemd, Caddy, Codexi sisselogimine teenuse kasutajale, tracker samas masinas | Ootel |
-| #22 | Projektijuhina soovin lisavaateid ja eksporti, et backlog'i oleks lihtne jagada. | Eksport Markdowni ja CSV-sse; kriteeriumile osutamine tõstab mockup'i elemendi esile (valmis koos #9-ga); story map rollide kaupa | Osaliselt |
-| #23 | Õpilasena soovin esitamisdokumendid koostada, et ülesanne oleks terviklik. | Kasutusstsenaarium; arendustöö backlog koos järjestuse põhjendusega; ülevaade; README | Töös |
+| #22 | Projektijuhina soovin lisavaateid ja eksporti, et backlog'i oleks lihtne jagada. | Eksport Markdowni ja CSV-sse; kriteeriumile osutamine tõstab mockup'i elemendi esile (valmis koos #9-ga); story map rollide kaupa | Valmis |
+| #23 | Õpilasena soovin esitamisdokumendid koostada, et ülesanne oleks terviklik. | Kasutusstsenaarium; arendustöö backlog koos järjestuse põhjendusega; ülevaade; README | Valmis |
 | #24 | Arendajana soovin, et testid ei loeks arendaja `.env` faili seadeid, et testid ei jõuaks kunagi päris AI ega trackerini. | Regressioonitest; kõik testid kasutavad `mock`-pakkujat ja trackerit pole seadistatud; täiskomplekt läbib ka `.env` olemasolul | Viga, valmis |
 | #25 | Projektijuhina soovin, et vaikimisi AI mudel oleks kiireim piisava kvaliteediga mudel, et kohtumisel ei peaks ootama. | Vaikimisi `gpt-6-luna` keskmise mõtlemistasemega; `.env.example` ja README näitavad seda; valik põhineb kolme mudeli vastuvõtukatsel | Valmis |
 

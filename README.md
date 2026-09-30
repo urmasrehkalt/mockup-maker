@@ -18,7 +18,8 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 - **Backlog.** Lood on Connextra kujul (roll, tegevus ja kasu eraldi), neil on kriteeriumid, staatus, suurus, avatud küsimused, mockup'id ja päritolu. Lugusid saab käsitsi lisada, muuta, lohistada ja kustutada ning viimaseid muudatusi tagasi võtta. Valmisoleku definitsioon on serveris jõustatud.
 - **Mockup'id.** Vaade on kindlatest komponentidest koosnev puu, mille rakendus ise joonistab (mitte AI-HTML). Kriteeriumid viitavad mockup'i elementidele, versioonid säilivad, mockup'i saab käsitsi redigeerida, sellele saab joonistada märkmeid ja selle saab alla laadida PNG-na.
 - **Kliendi täpsustus.** AI koostab muudatusettepaneku, mida näeb enne rakendamist eelvaatena. Server tagab, et muutub ainult valitud lugu.
-- **Groomimine.** Käsitsi jagamine, ühendamine, MVP joon ja alguspunkt ning AI ülevaatus, mille iga leiu saab rakendada, muuta või tähelepanuta jätta.
+- **Groomimine.** Käsitsi jagamine, ühendamine, MVP joon ja alguspunkt ning AI ülevaatus, mille iga leiu saab rakendada, muuta või tähelepanuta jätta. Story map näitab iga rolli happy path'i eraldi real.
+- **Eksport.** Backlog'i saab alla laadida Markdownina (lugemiseks ja jagamiseks) ja CSV-na (tabelarvutusse), mõlemad backlog'i järjekorras koos MVP joonega.
 - **Agile Tracker.** Lood saab koos mockup'i piltidega saata [Agile Trackerisse](https://github.com/urmasrehkalt/urmas-agiilne-tracker); uuesti saatmine uuendab olemasolevat lugu.
 - **Kaks keelt.** Liides on eesti ja inglise keeles, AI kirjutab projekti keeles.
 
@@ -33,6 +34,7 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 | `app/mockups.py`, `app/mockup_templates.py`, `app/mockup_png.py` | mockup'i komponendid ja reeglid, mallid, versioonid, märkmed ja PNG |
 | `app/review.py`, `app/testability.py` | AI ülevaatus ja kriteeriumide kontrollitavuse reegel |
 | `app/tracker.py`, `app/templates.py`, `app/projects.py`, `app/db.py` | trackerisse saatmine, projektimallid, projektid ja andmebaas (SQLite, migratsioonid) |
+| `app/export.py` | backlog'i eksport Markdowni ja CSV-sse |
 | `public/` | liides: HTML, CSS ja JavaScripti moodulid ilma ehitussammuta |
 | `tests/` | automaattestid (pytest); AI ja tracker on testides asendatud |
 

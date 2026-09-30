@@ -10,6 +10,7 @@ import { h, mount } from "../dom.js";
 import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 import { openStoryEditor } from "./story-editor.js";
+import { openStoryMap } from "./story-map.js";
 import { openTrackerDialog, trackerStatus } from "./tracker.js";
 
 const MVP = "mvp";
@@ -72,6 +73,9 @@ export function backlogPanel(state, reload, review) {
     stories.length ? h("div", { class: "backlog-foot" },
       h("button", { type: "button", class: "small review-button", onclick: review }, `✦ ${t("review.button")}`),
       trackerButton(state, reload),
+      h("button", { type: "button", class: "small", onclick: () => openStoryMap(state, reload) }, `▦ ${t("storymap.button")}`),
+      h("a", { class: "button-link small", href: `/api/projects/${project.id}/export.md`, download: "" }, `⭳ ${t("export.markdown")}`),
+      h("a", { class: "button-link small", href: `/api/projects/${project.id}/export.csv`, download: "" }, `⭳ ${t("export.csv")}`),
       hasLine ? null : h("button", { type: "button", class: "small add-mvp",
         onclick: () => commit(moved(MVP, Math.min(3, stories.length))) }, `+ ${t("backlog.add_mvp")}`)) : null);
 }
