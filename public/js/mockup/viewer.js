@@ -11,10 +11,10 @@ import { renderTree } from "./render.js";
 
 /**
  * @param mockup   { id?, title, version, tree }
- * @param options  { projectId, onChange, sharedWith } to show versions and allow editing;
+ * @param options  { projectId, onChange, sharedWith, language } to show versions and allow editing;
  *                 onChange() runs after a restore or a saved edit
  */
-export function openMockupViewer(mockup, { projectId = null, onChange = null, sharedWith = [] } = {}) {
+export function openMockupViewer(mockup, { projectId = null, onChange = null, sharedWith = [], language = "et" } = {}) {
   const stage = h("div", { class: "wf-stage" });
   const side = h("aside", { class: "versions" });
   const heading = h("h2", {});
@@ -104,7 +104,7 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
       markButton,
       projectId && mockup.id ? h("button", { type: "button", class: "small", onclick: () => {
         close();
-        openMockupEditor({ ...mockup, tree: shown.tree }, { projectId, sharedWith, onSaved: onChange });
+        openMockupEditor({ ...mockup, tree: shown.tree }, { projectId, sharedWith, onSaved: onChange, language });
       } }, `✎ ${t("mockup.edit")}`) : null,
       h("button", { type: "button", class: "small", onclick: close }, t("mockup.close"))),
     h("div", { class: "viewer-body" }, stage, projectId && mockup.id ? side : null));

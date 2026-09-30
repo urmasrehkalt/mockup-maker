@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { h, mount } from "../dom.js";
-import { formatDateTime, t } from "../i18n.js";
+import { formatDateTime, getLang, t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 
 export async function renderProjects(view) {
@@ -24,6 +24,7 @@ function projectCard(project) {
     project.description ? h("p", { class: "muted" }, project.description) : null,
     h("div", { class: "meta" },
       h("span", { class: "step-tag" }, t(`step.${project.step}`)),
+      h("span", { class: "lang-tag" }, project.language.toUpperCase()),
       h("span", {}, t("projects.updated", { when: formatDateTime(project.updated_at) }))));
 }
 
@@ -35,13 +36,16 @@ function createForm() {
   const idea = h("textarea", { id: "project-idea", name: "idea", maxlength: 4000, rows: 4,
     placeholder: t("projects.idea_hint") });
   const template = h("select", { id: "project-template" });
+  const language = h("select", { id: "project-language" },
+    ["et", "en"].map((code) => h("option", { value: code }, t(`lang.name.${code}`))));
+  language.value = getLang();
   const removeTemplate = h("button", { type: "button", class: "small", hidden: true }, t("templates.delete"));
   const status = h("div", { class: "form-status" });
   const submit = h("button", { type: "submit", class: "primary" }, t("projects.create"));
   let templates = [];
 
   async function loadTemplates(selected = "") {
-    templates = await api.projectTemplates().catch(() => []);
+    templates = await api.projectTemplates(getLang()).catch(() => []);
     mount(template, h("option", { value: "" }, t("templates.none")),
       h("optgroup", { label: t("templates.built_in") }, templates.filter((x) => x.built_in).map(option)),
       templates.some((x) => !x.built_in)
@@ -92,7 +96,8 @@ function createForm() {
     submit.disabled = true;
     mount(status);
     try {
-      const project = await api.createProject({ name: name.value, description: description.value, idea: idea.value });
+      const project = await api.createProject({ name: name.value, description: description.value, idea: idea.value,
+        language: language.value });
       location.hash = `#/p/${project.id}`;
     } catch (error) {
       mount(status, notice(errorText(error), "error"));
@@ -109,6 +114,8 @@ function createForm() {
     h("label", { for: "project-description" }, t("projects.description")), description,
     h("label", { for: "project-idea" }, t("projects.idea")), idea,
     h("p", { class: "hint" }, t("projects.idea_note")),
+    h("label", { for: "project-language" }, t("projects.language")), language,
+    h("p", { class: "hint" }, t("projects.language_hint")),
     status, submit,
     h("button", { type: "button", class: "save-template", onclick: saveTemplate }, t("templates.save")));
 }

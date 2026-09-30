@@ -2,14 +2,20 @@
 // Only the latest assistant message is interactive; older cards show what was chosen.
 
 import { h, mount } from "../dom.js";
-import { t } from "../i18n.js";
+import { contentText, storyTitle as composeTitle, t } from "../i18n.js";
 import { api } from "../api.js";
 import { renderTree } from "../mockup/render.js";
 import { issueList } from "../ui.js";
 import { reviewCard } from "./review.js";
 
+// Mockup template names for review cards, in the project's language.
 let templates = [];
-api.templates().then((list) => { templates = list; }).catch(() => {});
+let templatesFor = null;
+function loadTemplates(language) {
+  if (templatesFor === language) return;
+  templatesFor = language;
+  api.templates(language).then((list) => { templates = list; }).catch(() => {});
+}
 import { openMockupViewer } from "../mockup/viewer.js";
 
 // Resume actions (from the server) that move the process to a step.
@@ -31,6 +37,8 @@ const ACTION_STEP = {
  * @param options { pending, error } for the in-flight turn
  */
 export function conversation(state, send, { pending = false, error = null, slow = false } = {}) {
+  contentLanguage = state.project.language;
+  loadTemplates(contentLanguage);
   const { messages } = state;
   const last = messages[messages.length - 1];
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
@@ -75,7 +83,7 @@ function assistantMessage(message, live, send, state) {
     c.priority ? priorityCard(message, live, send, state) : null,
     c.proposal ? proposalCard(message, live, send, state) : null,
     c.change ? changeCard(message, live, send, state) : null,
-    c.review ? reviewCard(message, send, templates) : null,
+    c.review ? reviewCard(message, send, templates, contentLanguage) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
 }
 
@@ -179,10 +187,8 @@ function rolesCard(message, live, send, state) {
 
 // --- stories -------------------------------------------------------------
 
-function storyTitle(story) {
-  const phrase = story.role_phrase.charAt(0).toUpperCase() + story.role_phrase.slice(1);
-  return t("story.title", { role: phrase, action: story.action, benefit: story.benefit.replace(/\.$/, "") });
-}
+let contentLanguage = "et"; // the current project's; set on every render
+const storyTitle = (story) => composeTitle(story, contentLanguage);
 
 function storiesCard(message, live, send) {
   const c = message.content;
@@ -430,7 +436,7 @@ function changeCard(message, live, send, state) {
   const editMode = () => {
     const wording = c.wording ?? c.before.wording;
     const fields = ["role_phrase", "action", "benefit"].map((name) => {
-      const input = h("input", { type: "text", maxlength: name === "role_phrase" ? 80 : 300, "aria-label": t(`editor.${name === "role_phrase" ? "phrase" : name}`) });
+      const input = h("input", { type: "text", maxlength: name === "role_phrase" ? 80 : 300, "aria-label": contentText(contentLanguage, name === "role_phrase" ? "phrase" : name) });
       input.value = wording[name];
       return [name, input];
     });
@@ -439,7 +445,7 @@ function changeCard(message, live, send, state) {
     mount(body, 
       h("p", { class: "hint" }, t("chat.change_edit_hint")),
       h("div", { class: "change-section" }, h("h4", {}, t("chat.change_wording")),
-        fields.map(([name, input]) => h("label", { class: "stacked" }, t(`editor.${name === "role_phrase" ? "phrase" : name}`), input))),
+        fields.map(([name, input]) => h("label", { class: "stacked" }, contentText(contentLanguage, name === "role_phrase" ? "phrase" : name), input))),
       h("div", { class: "change-section" }, h("h4", {}, t("editor.criteria")), h("p", { class: "hint" }, t("chat.one_per_line")), criteria));
     mount(actions, 
       h("button", { type: "button", onclick: preview }, t("editor.cancel")),

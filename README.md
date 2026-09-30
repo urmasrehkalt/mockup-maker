@@ -66,6 +66,15 @@ Seejärel pane `.env` faili `AI_PROVIDER=codex` ja taaskäivita server. Iga AI v
 kontrollitakse serveris skeemi järgi; vigase vastuse korral proovitakse üks kord uuesti
 ja seejärel näidatakse arusaadavat veateadet.
 
+## Keeled
+
+Liidese keelt (eesti / inglise) saab vahetada päise nupust; valik jääb brauserisse meelde.
+Igal projektil on oma **sisu keel**, mis valitakse projekti loomisel: selles keeles kirjutab AI
+lood, kriteeriumid ja mockup'id ning selles vormis koostatakse Connextra pealkiri
+(„Külastajana soovin …, et …“ või „As a visitor, I want to …, so that …“). Nii jääb üks backlog
+ühte keelde ka siis, kui liidese keelt vahetatakse. Näidisrežiimi (`AI_PROVIDER=mock`) vastused on
+ainult eesti keeles.
+
 ## Testid
 
 ```bash

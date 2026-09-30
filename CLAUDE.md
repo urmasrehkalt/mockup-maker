@@ -39,8 +39,10 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   `--output-schema`; `tasks.py` `run_task()` validates every answer and retries once.
   New AI features define a `Task` (instructions, response model, mock answer).
 
-Frontend: ES modules in `public/js/` (`app.js` hash router, `views/`, `api.js`, `i18n.js`
-`t()` strings). Build DOM only through `dom.js` `h()`, which inserts text as text nodes:
+Frontend: ES modules in `public/js/` (`app.js` hash router, `views/`, `api.js`, `i18n.js`).
+UI strings: `t()` in the viewer's language (every key in both `et` and `en`). A project's content
+language (`projects.language`) is separate: story sentences use `storyTitle()`/`contentText()`
+with it, never `t()`. Build DOM only through `dom.js` `h()`, which inserts text as text nodes:
 never assign data or AI output to `innerHTML`.
 
 Planned (see GitHub issues): mockups as a validated component-JSON tree rendered by the app

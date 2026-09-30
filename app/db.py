@@ -160,6 +160,10 @@ MIGRATIONS: list[str] = [
     );
     ALTER TABLE projects ADD COLUMN draft_idea TEXT NOT NULL DEFAULT '';
     """,
+    # 13: the language a project's content is written in (the AI writes in it too)
+    """
+    ALTER TABLE projects ADD COLUMN language TEXT NOT NULL DEFAULT 'et' CHECK (language IN ('et', 'en'));
+    """,
 ]
 
 

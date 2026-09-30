@@ -9,7 +9,7 @@ import { thumbnail } from "./render.js";
 import { openMockupEditor } from "./editor.js";
 import { openMockupViewer } from "./viewer.js";
 
-let templateCache = null;
+const templateCache = {}; // per content language
 
 export function storyMockups(state, story, reload) {
   const section = h("fieldset", { class: "story-mockups" });
@@ -25,7 +25,9 @@ async function draw(section, state, story, reload) {
   const linked = state.mockups.filter((m) => story.mockup_ids.includes(m.id));
   const others = state.mockups.filter((m) => !story.mockup_ids.includes(m.id));
   const status = h("div", { class: "form-status" });
-  templateCache ??= await api.templates().catch(() => []);
+  const language = state.project.language;
+  templateCache[language] ??= await api.templates(language).catch(() => []);
+  const templates = templateCache[language];
 
   const act = async (work) => {
     mount(status);
@@ -43,9 +45,9 @@ async function draw(section, state, story, reload) {
     draw(section, next, next.stories.find((s) => s.id === story.id) ?? story, reload);
   };
   const sharedWith = (m) => state.stories.filter((s) => s.mockup_ids.includes(m.id)).map((s) => s.key);
-  const viewerOptions = { projectId: state.project.id, onChange: refresh };
+  const viewerOptions = { projectId: state.project.id, onChange: refresh, language };
   const templateSelect = h("select", { "aria-label": t("mockup.template") },
-    templateCache.map((tpl) => h("option", { value: tpl.key }, tpl.name)));
+    templates.map((tpl) => h("option", { value: tpl.key }, tpl.name)));
   const existingSelect = h("select", { "aria-label": t("mockup.existing") },
     others.map((m) => h("option", { value: m.id }, `${m.title} (v${m.version})`)));
 
@@ -60,7 +62,7 @@ async function draw(section, state, story, reload) {
           h("div", { class: "mockup-link-actions" },
             h("button", { type: "button", class: "small", onclick: () => openMockupViewer(m, { ...viewerOptions, sharedWith: sharedWith(m) }) }, t("mockup.view")),
             h("button", { type: "button", class: "small", onclick: () =>
-              openMockupEditor(m, { projectId: state.project.id, sharedWith: sharedWith(m), onSaved: refresh }) },
+              openMockupEditor(m, { projectId: state.project.id, sharedWith: sharedWith(m), onSaved: refresh, language }) },
             `✎ ${t("mockup.edit")}`),
             h("button", { type: "button", class: "small", onclick: () =>
               act(() => api.unlinkMockup(state.project.id, story.id, m.id)) }, t("mockup.unlink")))))))

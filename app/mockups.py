@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import backlog, db
-from .mockup_templates import TEMPLATES
+from .mockup_templates import TEMPLATES, localized
 
 ComponentType = Literal[
     "header", "nav", "heading", "text", "image", "card", "grid", "price_card", "list", "table",
@@ -224,8 +224,9 @@ class Template(BaseModel):
 
 # --- storage -------------------------------------------------------------
 
-def templates() -> list[Template]:
-    return [Template(key=key, name=name, tree=Tree(**tree)) for key, (name, tree) in TEMPLATES.items()]
+def templates(language: str = "et") -> list[Template]:
+    return [Template(key=key, name=name, tree=Tree(**tree))
+            for key in TEMPLATES for name, tree in [localized(key, language)]]
 
 
 def mockups(conn: sqlite3.Connection, project_id: int) -> list[Mockup]:
@@ -385,8 +386,8 @@ router = APIRouter(tags=["mockups"])
 
 
 @router.get("/api/mockup-templates", response_model=list[Template])
-def list_templates():
-    return templates()
+def list_templates(lang: Literal["et", "en"] = "et"):
+    return templates(lang)
 
 
 @router.post("/api/projects/{project_id}/mockups", response_model=Mockup, status_code=201)
@@ -394,7 +395,8 @@ def post_mockup(project_id: int, data: MockupIn, conn: sqlite3.Connection = Depe
     if conn.execute("SELECT 1 FROM projects WHERE id = ?", (project_id,)).fetchone() is None:
         raise HTTPException(404, "Project not found")
     if data.template is not None:
-        chosen = next((t for t in templates() if t.key == data.template), None)
+        language = conn.execute("SELECT language FROM projects WHERE id = ?", (project_id,)).fetchone()[0]
+        chosen = next((t for t in templates(language) if t.key == data.template), None)
         if chosen is None:
             raise HTTPException(422, f"Unknown template {data.template!r}")
         tree = chosen.tree

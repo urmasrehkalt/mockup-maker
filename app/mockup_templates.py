@@ -104,3 +104,47 @@ TEMPLATES: dict[str, tuple[str, dict]] = {
         FOOTER,
     ]}),
 }
+
+
+# English wording for the templates' sample texts (the structure and ids are shared).
+ENGLISH = {
+    "Avaleht": "Home", "Teenuse nimi": "Service name", "Teenused": "Services", "Hinnad": "Prices",
+    "Kontakt": "Contact", "Logi sisse": "Log in", "Peamine pakkumine ühe lausega": "The main offer in one sentence",
+    "Lühike selgitus, kellele teenus on ja mis kasu see toob.": "A short note on who the service is for and how it helps.",
+    "Alusta": "Get started", "Pilt teenusest": "Picture of the service", "Eelis 1": "Benefit 1",
+    "Lühike kirjeldus.": "Short description.", "Eelis 2": "Benefit 2", "Eelis 3": "Benefit 3",
+    "© Ettevõte · info@example.com · +372 5555 5555": "© Company · info@example.com · +372 5555 5555",
+    "Loend": "List", "Kõik kirjed": "All items", "Otsi": "Search", "Sisesta märksõna": "Enter a keyword",
+    "Kategooria": "Category", "Kirje 1": "Item 1", "Lühikirjeldus": "Summary", "Vaata": "View",
+    "Kirje 2": "Item 2", "Kirje 3": "Item 3", "Hinnakiri": "Pricing", "Paketid ja hinnad": "Packages and prices",
+    "Põhipakett": "Basic", "29 € / kuu": "€29 / month", "Omadus 1": "Feature 1", "Omadus 2": "Feature 2",
+    "Vali": "Choose", "Pluss": "Plus", "39 € / kuu": "€39 / month", "Omadus 3": "Feature 3", "Premium": "Premium",
+    "59 € / kuu": "€59 / month", "Kõik omadused": "All features", "Detailvaade": "Detail", "Kirje nimi": "Item name",
+    "Kirje pilt": "Item picture", "Kirje põhjalik kirjeldus.": "A full description of the item.",
+    "Omadus": "Property", "Väärtus": "Value", "Kestus": "Duration", "60 min": "60 min", "Asukoht": "Location",
+    "Saal 1": "Room 1", "Vali see": "Choose this", "Vorm": "Form", "Registreerumine": "Sign up", "Nimi": "Name",
+    "E-post": "Email", "Telefon": "Phone", "Nõustun tingimustega": "I accept the terms", "Saada": "Send",
+    "Maksmine": "Checkout", "Valik": "Choice", "Andmed": "Details", "Makse": "Payment", "Kinnitus": "Confirmation",
+    "Tellimuse kokkuvõte": "Order summary", "Toode": "Product", "Hind": "Price", "Valitud pakett": "Selected package",
+    "29 €": "€29", "Kokku": "Total", "Hinnad sisaldavad käibemaksu": "Prices include VAT", "Makseviis": "Payment method",
+    "Maksa": "Pay", "Aitäh! Tellimus on kinnitatud.": "Thank you! Your order is confirmed.",
+    "Tellimuse number: 12345": "Order number: 12345", "Kinnitus saadeti e-postile": "A confirmation was sent by email",
+    "Tagasi avalehele": "Back to home",
+}
+
+
+def localized(key: str, language: str) -> tuple[str, dict]:
+    """A template's name and tree in the project's language (Estonian as written)."""
+    name, tree = TEMPLATES[key]
+    if language != "en":
+        return name, tree
+
+    def tr(value):
+        if isinstance(value, str):
+            return ENGLISH.get(value, value)
+        if isinstance(value, list):
+            return [tr(v) for v in value]
+        if isinstance(value, dict):
+            return {k: (v if k in ("id", "type", "variant") else tr(v)) for k, v in value.items()}
+        return value
+    return tr(name), tr(tree)

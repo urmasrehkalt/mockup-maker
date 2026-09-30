@@ -2,16 +2,16 @@
 // of the proposal; Apply, Edit and Ignore decide each finding on its own.
 
 import { h, mount } from "../dom.js";
-import { t } from "../i18n.js";
+import { contentText, storyTitle, t } from "../i18n.js";
 
-const title = (w) => {
-  const phrase = w.role_phrase.charAt(0).toUpperCase() + w.role_phrase.slice(1);
-  return t("story.title", { role: phrase, action: w.action, benefit: w.benefit.replace(/\.$/, "") });
-};
+let language = "et"; // the project's content language, set per review card
 const PROPOSAL = { too_large: "split", overlap: "merge", untestable_criteria: "criteria",
   missing_criteria: "criteria", no_mockup: "mockup", not_connextra: "wording" };
 
-export function reviewCard(message, send, templates) {
+const title = (w) => storyTitle(w, language);
+
+export function reviewCard(message, send, templates, contentLanguage = "et") {
+  language = contentLanguage;
   const findings = message.content.review.findings;
   if (!findings.length) return h("div", { class: "card-block answered" }, h("p", { class: "muted" }, t("review.none")));
   return h("div", { class: "card-block review" },
@@ -106,10 +106,10 @@ function editor(f, kind, templates) {
   };
   const read = (el) => el.value.split("\n").map((l) => l.trim()).filter(Boolean);
   const wordingFields = (w) => {
-    const fields = { role_phrase: text(w.role_phrase, t("editor.phrase")), action: text(w.action, t("editor.action")),
-      benefit: text(w.benefit, t("editor.benefit")) };
-    return { element: h("div", { class: "connextra-row" }, fields.role_phrase, h("span", {}, t("grooming.want")),
-      fields.action, h("span", {}, t("grooming.so_that")), fields.benefit),
+    const fields = { role_phrase: text(w.role_phrase, contentText(language, "phrase")),
+      action: text(w.action, contentText(language, "action")), benefit: text(w.benefit, contentText(language, "benefit")) };
+    return { element: h("div", { class: "connextra-row" }, fields.role_phrase, h("span", {}, contentText(language, "want")),
+      fields.action, h("span", {}, contentText(language, "soThat")), fields.benefit),
     value: () => Object.fromEntries(Object.entries(fields).map(([k, el]) => [k, el.value.trim()])) };
   };
 

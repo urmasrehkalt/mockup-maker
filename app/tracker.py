@@ -110,26 +110,32 @@ def _ensure_project(conn: sqlite3.Connection, project: projects.Project, t: Tran
         if status == 200:
             return row["tracker_project_id"]
     status, data = t.request("POST", "/api/projects", {
-        "name": project.name[:120], "description": project.description or "Mockup Maker'ist saadetud backlog"})
+        "name": project.name[:120], "description": project.description or (
+            "Backlog sent from Mockup Maker" if project.language == "en" else "Mockup Maker'ist saadetud backlog")})
     created = _check(status, data, "create the project")
     with conn:
         conn.execute("UPDATE projects SET tracker_project_id = ? WHERE id = ?", (created["id"], project.id))
     return created["id"]
 
 
-def story_payload(story: backlog.Story, project_id: int) -> dict[str, Any]:
+LABELS = {"et": {"role": "Roll", "size": "Suurus", "questions": "Avatud küsimused"},
+          "en": {"role": "Role", "size": "Size", "questions": "Open questions"}}
+
+
+def story_payload(story: backlog.Story, project_id: int, language: str = "et") -> dict[str, Any]:
     """The tracker's StoryCreate fields, nothing else (it forbids extras)."""
     # The tracker shows the description on one line, so the short facts share it.
-    facts = [f"{story.key} · Mockup Maker", f"Roll: {story.role_name}"]
+    words = LABELS[language]
+    facts = [f"{story.key} · Mockup Maker", f"{words['role']}: {story.role_name}"]
     if story.in_mvp:
         facts.append("MVP")
     if story.size:
-        facts.append(f"Suurus: {story.size}")
+        facts.append(f"{words['size']}: {story.size}")
     lines = [" · ".join(facts)]
     if story.notes:
         lines += ["", story.notes]
     if story.open_questions:
-        lines += ["", "Avatud küsimused:", *[f"- {q}" for q in story.open_questions]]
+        lines += ["", f"{words['questions']}:", *[f"- {q}" for q in story.open_questions]]
     return {"title": story.title, "description": "\n".join(lines),
             "points": config.tracker_points().get(story.size or "", 0),
             "projectId": project_id, "acceptanceCriteria": [c.text for c in story.criteria]}
@@ -140,7 +146,8 @@ def _push_story(conn: sqlite3.Connection, project_id: int, story: backlog.Story,
     if not story.criteria:
         return PushResult(key=story.key, outcome="skipped",
                           message="The tracker needs at least one acceptance criterion")
-    payload = story_payload(story, tracker_project)
+    language = conn.execute("SELECT language FROM projects WHERE id = ?", (project_id,)).fetchone()[0]
+    payload = story_payload(story, tracker_project, language)
     link = conn.execute("SELECT * FROM tracker_links WHERE story_id = ?", (story.id,)).fetchone()
     outcome, tracker_id = "created", None
     if link:

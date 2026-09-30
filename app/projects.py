@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from . import backlog, db, mockups
 
 Step = Literal["idea", "roles", "stories", "priorities", "criteria", "refinements", "grooming"]
+Language = Literal["et", "en"]
 STEPS: tuple[str, ...] = Step.__args__
 
 # What to offer on reopen, by step: at most four actions, the likely one first.
@@ -39,6 +40,7 @@ class ProjectIn(_Stripped):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
     idea: str = Field(default="", max_length=4000)  # the client's idea, pre-filled for the first message
+    language: Language = "et"  # the content's language; the AI writes in it
 
 
 class ProjectPatch(_Stripped):
@@ -46,6 +48,7 @@ class ProjectPatch(_Stripped):
     description: str | None = Field(default=None, max_length=1000)
     step: Step | None = None
     current_story_id: int | None = None  # the story to start with
+    language: Language | None = None  # applies to new content; existing stories keep their words
 
 
 class Project(BaseModel):
@@ -56,6 +59,7 @@ class Project(BaseModel):
     current_story_id: int | None = None
     mvp_count: int | None = None
     draft_idea: str = ""
+    language: Language = "et"
     created_at: str
     updated_at: str
 
@@ -99,8 +103,8 @@ def create(conn: sqlite3.Connection, data: ProjectIn) -> Project:
     stamp = db.now()
     with conn:
         cur = conn.execute(
-            "INSERT INTO projects (name, description, draft_idea, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?)", (data.name, data.description, data.idea, stamp, stamp))
+            "INSERT INTO projects (name, description, draft_idea, language, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)", (data.name, data.description, data.idea, data.language, stamp, stamp))
     return get(conn, cur.lastrowid)
 
 

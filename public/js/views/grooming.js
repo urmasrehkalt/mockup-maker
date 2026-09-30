@@ -3,7 +3,7 @@
 
 import { api } from "../api.js";
 import { h, mount } from "../dom.js";
-import { t } from "../i18n.js";
+import { contentText, t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 
 function dialogShell(title) {
@@ -58,8 +58,8 @@ export function openSplitDialog(state, story, reload) {
   function drawParts() {
     mount(partsBox, parts.map((part, i) => {
       const fields = ["role_phrase", "action", "benefit"].map((name) => {
-        const el = input(part[name], { "aria-label": `${t("grooming.part", { n: i + 1 })}: ${t(`editor.${name === "role_phrase" ? "phrase" : name}`)}`,
-          placeholder: t(`editor.${name === "role_phrase" ? "phrase" : name}`) });
+        const word = contentText(state.project.language, name === "role_phrase" ? "phrase" : name);
+        const el = input(part[name], { "aria-label": `${t("grooming.part", { n: i + 1 })}: ${word}`, placeholder: word });
         el.addEventListener("input", () => { part[name] = el.value; stale(); });
         return el;
       });
@@ -67,7 +67,8 @@ export function openSplitDialog(state, story, reload) {
       extra.value = part.newCriteria ?? "";
       extra.addEventListener("input", () => { part.newCriteria = extra.value; stale(); });
       return h("fieldset", {}, h("legend", {}, t("grooming.part", { n: i + 1 }), i === 0 ? h("span", { class: "hint" }, ` (${story.key})`) : null),
-        h("div", { class: "connextra-row" }, fields[0], h("span", {}, t("grooming.want")), fields[1], h("span", {}, t("grooming.so_that")), fields[2]),
+        h("div", { class: "connextra-row" }, fields[0], h("span", {}, contentText(state.project.language, "want")), fields[1],
+          h("span", {}, contentText(state.project.language, "soThat")), fields[2]),
         extra,
         i >= 2 ? h("button", { type: "button", class: "small", onclick: () => {
           parts.splice(i, 1);

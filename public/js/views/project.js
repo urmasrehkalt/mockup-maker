@@ -89,7 +89,7 @@ class ProjectPage {
     mount(this.view,
       h("div", { class: "project-head" },
         backLink(),
-        h("h1", {}, project.name),
+        h("h1", {}, project.name, " ", h("span", { class: "lang-tag", title: t("projects.language") }, project.language.toUpperCase())),
         project.description ? h("p", { class: "muted" }, project.description) : null),
       stepBar(project.step, (step) => this.goTo(step), this.pending),
       h("div", { class: "workspace" },

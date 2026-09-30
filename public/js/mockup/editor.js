@@ -10,6 +10,28 @@ import { errorText, notice } from "../ui.js";
 import { renderTree } from "./render.js";
 import * as ops from "./tree-ops.js";
 
+// Sample content for new components, in the project's content language.
+const DEFAULTS_EN = {
+  header: { text: "Service name", children: null },
+  nav: { items: ["Home", "Services", "Contact"] },
+  heading: { text: "Heading", level: 2 },
+  text: { text: "Short text." },
+  image: { text: "Picture" },
+  card: { text: "Card title", secondary: "Short description." },
+  grid: { columns: 3 },
+  price_card: { text: "Package", secondary: "€29 / month", items: ["Feature 1", "Feature 2"] },
+  list: { items: ["Point 1", "Point 2"] },
+  table: { items: ["Column 1", "Column 2"], rows: [["…", "…"]] },
+  form: {},
+  input: { text: "Field", variant: "text" },
+  button: { text: "Button", variant: "primary" },
+  footer: { text: "© Company" },
+  section: { text: null },
+  note: { text: "Note" },
+  notice: { text: "Notice", variant: "info" },
+  steps: { items: ["Step 1", "Step 2", "Step 3"] },
+};
+
 const DEFAULTS = {
   header: { text: "Teenuse nimi", children: null },
   nav: { items: ["Avaleht", "Teenused", "Kontakt"] },
@@ -50,8 +72,10 @@ const VARIANTS = {
 
 // A new component with sample content. A grid and a form must have children to be
 // valid, so they start with some; `given` keeps the new ids unique among themselves.
+let samples = DEFAULTS;
+
 function blank(tree, type, given = new Set()) {
-  const node = { id: ops.newId(tree, type, given), type, ...structuredClone(DEFAULTS[type]) };
+  const node = { id: ops.newId(tree, type, given), type, ...structuredClone(samples[type]) };
   given.add(node.id);
   if (type === "grid") node.children = [blank(tree, "card", given), blank(tree, "card", given)];
   if (type === "form") node.children = [blank(tree, "input", given), blank(tree, "button", given)];
@@ -60,9 +84,10 @@ function blank(tree, type, given = new Set()) {
 
 /**
  * @param mockup   { id, title, version, tree }
- * @param options  { projectId, sharedWith: [story keys], onSaved }
+ * @param options  { projectId, sharedWith: [story keys], onSaved, language: the project's content language }
  */
-export function openMockupEditor(mockup, { projectId, sharedWith = [], onSaved }) {
+export function openMockupEditor(mockup, { projectId, sharedWith = [], onSaved, language = "et" }) {
+  samples = language === "en" ? DEFAULTS_EN : DEFAULTS;
   const tree = structuredClone(mockup.tree);
   let selected = null;
   let dirty = false;

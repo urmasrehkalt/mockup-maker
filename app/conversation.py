@@ -144,10 +144,12 @@ Rules for this turn:
   happy path (the typical successful flow from first contact to reaching the goal, no errors or
   edge cases), in the order the user walks through it. The main role is the first of INPUT.roles
   unless the idea clearly centres on another. One role and one goal per story. Fields:
-  role_name exactly as in INPUT.roles; role_phrase = the role as the Connextra sentence starts in
-  INPUT.language (Estonian essive, e.g. "Külastajana", "Klubi liikmena"); action = what they want,
-  the words after "soovin" (e.g. "näha liikmepakette ja hindu"); benefit = why, the words after
-  "et" (e.g. "valida endale sobiv pakett"). Do not repeat stories already in INPUT.backlog; when
+  role_name exactly as in INPUT.roles; role_phrase = the role as the Connextra sentence needs it in
+  INPUT.language (Estonian: the essive, e.g. "Külastajana", "Klubi liikmena"; English: with its
+  article, e.g. "a visitor", "a club member"); action = what they want, the words after
+  "soovin" / "I want to" (e.g. "näha liikmepakette ja hindu" / "see the membership packages");
+  benefit = why, the words after "et" / "so that" (e.g. "valida endale sobiv pakett" / "I can
+  choose one that suits me"). Do not repeat stories already in INPUT.backlog; when
   asked for different ones, offer a different cut. When INPUT.user_input.kind is "stories" the
   user added them to the backlog: move to the priorities step and, in this same turn, ask which
   story matters most to the client.
@@ -428,7 +430,7 @@ def build_payload(conn: sqlite3.Connection, project_id: int, data: Any,
                        if m.role == "user" and m.content.get("input", {}).get("kind") == "text"), None)
     clarifications = projects.clarifications(conn, project_id)
     return {
-        "language": "et",
+        "language": project.language,
         "project": {"name": project.name, "description": project.description},
         "idea": first_text,
         "step": project.step,
@@ -680,7 +682,7 @@ def _stored_change(conn: sqlite3.Connection, project_id: int, change: Change) ->
     }
     if change.wording:
         data["after_title"] = backlog.title(backlog.StoryParts(
-            role_name=story.role_name, **change.wording.model_dump()))
+            role_name=story.role_name, **change.wording.model_dump()), project.language)
     return data
 
 

@@ -26,6 +26,19 @@ BUILT_IN = [
 ]
 
 
+BUILT_IN_EN = [
+    ("sport", "Sports club website", "Introducing trainings and joining as a member",
+     "A sports club wants a website where people can explore the trainings and join as members."),
+    ("shop", "Online shop", "Product catalogue, basket and ordering",
+     "A small shop wants an online store where customers can browse products, add them to a basket "
+     "and pay for the order online."),
+    ("booking", "Booking", "Booking time slots for a service",
+     "A beauty salon wants a website where clients can pick a service and a stylist and book a time that suits them."),
+    ("members", "Association members' site", "Member details, events and membership fees",
+     "A non-profit wants a website for its members to see events, sign up for them and pay the membership fee."),
+]
+
+
 class TemplateIn(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=120)
@@ -41,10 +54,10 @@ class Template(BaseModel):
     built_in: bool
 
 
-def all_templates(conn: sqlite3.Connection) -> list[Template]:
+def all_templates(conn: sqlite3.Connection, language: str = "et") -> list[Template]:
     own = conn.execute("SELECT * FROM prompt_templates ORDER BY name COLLATE NOCASE, id").fetchall()
     return ([Template(key=key, name=name, description=desc, idea=idea, built_in=True)
-             for key, name, desc, idea in BUILT_IN]
+             for key, name, desc, idea in (BUILT_IN_EN if language == "en" else BUILT_IN)]
             + [Template(key=f"u{r['id']}", name=r["name"], description=r["description"], idea=r["idea"],
                         built_in=False) for r in own])
 
@@ -53,8 +66,8 @@ router = APIRouter(prefix="/api/templates", tags=["templates"])
 
 
 @router.get("", response_model=list[Template])
-def list_templates(conn: sqlite3.Connection = Depends(db.get_db)):
-    return all_templates(conn)
+def list_templates(lang: str = "et", conn: sqlite3.Connection = Depends(db.get_db)):
+    return all_templates(conn, "en" if lang == "en" else "et")
 
 
 @router.post("", response_model=Template, status_code=201)

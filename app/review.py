@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import backlog, db, mockups, projects, testability
 from .ai import Task, run_task
-from .mockup_templates import TEMPLATES
+from .mockup_templates import TEMPLATES, localized
 
 FindingKind = Literal["too_large", "overlap", "untestable_criteria", "missing_criteria",
                       "no_mockup", "not_connextra"]
@@ -118,9 +118,10 @@ backlog looks. If everything is fine, return no findings."""
 
 def build_payload(conn: sqlite3.Connection, project_id: int) -> dict[str, Any]:
     stories = backlog.stories(conn, project_id)
+    language = projects.get(conn, project_id).language
     return {
-        "language": "et",
-        "templates": {key: name for key, (name, _) in TEMPLATES.items()},
+        "language": language,
+        "templates": {key: localized(key, language)[0] for key in TEMPLATES},
         "backlog": [{
             "key": s.key, "role_name": s.role_name, "role_phrase": s.role_phrase, "action": s.action,
             "benefit": s.benefit, "title": s.title, "status": s.status, "in_mvp": s.in_mvp,
@@ -181,26 +182,39 @@ def check_review(review: Review, payload: dict[str, Any]) -> str | None:
 
 # --- a stand-in review, and filling gaps by rule ----------------------------
 
-def _rule_finding(story: dict[str, Any], kind: str) -> dict[str, Any]:
+RULE_TEXTS = {
+    "et": {"fillers": ["Vaates on pealkiri.", "Vaates on nupp põhitegevuse jaoks.",
+                       "Pärast tegevust kuvatakse kinnitus."],
+           "criteria": ("Kriteeriumid on puudulikud või mittekontrollitavad.",
+                        "Iga kriteerium peab olema üks jah/ei tingimus ja neid peab olema vähemalt kolm."),
+           "mockup": ("Vaadet puudutaval lool puudub mockup.", "Klient ei saa lugu visuaalselt kontrollida."),
+           "wording": ("Pealkiri ei ole Connextra vormis.", "Rolli, tegevuse ja kasu osad peavad lauses olema eraldi.")},
+    "en": {"fillers": ["The view has a heading.", "The view has a button for the main action.",
+                       "A confirmation is shown after the action."],
+           "criteria": ("The criteria are missing or cannot be checked.",
+                        "Each criterion must be one yes/no condition, and there must be at least three."),
+           "mockup": ("A story about a view has no mockup.", "The client cannot check the story visually."),
+           "wording": ("The title is not in Connextra form.", "The role, action and benefit must be separate parts.")},
+}
+
+
+def _rule_finding(story: dict[str, Any], kind: str, language: str = "et") -> dict[str, Any]:
     """A finding the server can propose on its own for a known problem."""
+    words = RULE_TEXTS[language]
     base = {"kind": kind, "story_keys": [story["key"]], "split": None, "merge": None,
             "criteria": None, "mockup": None, "wording": None}
     testable = [c["text"] for c in story["criteria"] if not c["issues"]]
     if kind in ("untestable_criteria", "missing_criteria"):
-        fillers = ["Vaates on pealkiri.", "Vaates on nupp põhitegevuse jaoks.", "Pärast tegevust kuvatakse kinnitus."]
-        proposed = testable + [f for f in fillers if f not in testable][:max(0, 3 - len(testable))]
-        return {**base, "problem": "Kriteeriumid on puudulikud või mittekontrollitavad.",
-                "reason": "Iga kriteerium peab olema üks jah/ei tingimus ja neid peab olema vähemalt kolm.",
+        proposed = testable + [f for f in words["fillers"] if f not in testable][:max(0, 3 - len(testable))]
+        return {**base, "problem": words["criteria"][0], "reason": words["criteria"][1],
                 "criteria": {"criteria": proposed}}
     if kind == "no_mockup":
-        return {**base, "problem": "Vaadet puudutaval lool puudub mockup.",
-                "reason": "Klient ei saa lugu visuaalselt kontrollida.",
+        return {**base, "problem": words["mockup"][0], "reason": words["mockup"][1],
                 "mockup": {"template": "detail", "title": story["action"][:120]}}
-    return {**base, "problem": "Pealkiri ei ole Connextra vormis.",
-            "reason": "Rolli, tegevuse ja kasu osad peavad lauses olema eraldi.",
+    return {**base, "problem": words["wording"][0], "reason": words["wording"][1],
             "wording": {"role_phrase": re.sub(r"\s*soovin$", "", story["role_phrase"]).strip() or story["role_phrase"],
-                        "action": re.sub(r"^(soovin|tahan)\s+", "", story["action"]),
-                        "benefit": re.sub(r"^(et|selleks et)\s+", "", story["benefit"])}}
+                        "action": re.sub(r"^(soovin|tahan|i want to|i want)\s+", "", story["action"], flags=re.I),
+                        "benefit": re.sub(r"^(et|selleks et|so that)\s+", "", story["benefit"], flags=re.I)}}
 
 
 def _words(text: str) -> set[str]:
@@ -241,7 +255,7 @@ def mock_review(payload: dict[str, Any]) -> dict[str, Any]:
                                  "split": None, "criteria": None, "mockup": None, "wording": None})
     draft = Review.model_construct(findings=[Finding.model_construct(**f) for f in findings])
     for key, kind in uncovered(draft, payload):
-        findings.append(_rule_finding(next(s for s in stories if s["key"] == key), kind))
+        findings.append(_rule_finding(next(s for s in stories if s["key"] == key), kind, payload["language"]))
     return {"summary": f"Leidsin {len(findings)} kohta, mis vajavad tähelepanu." if findings
             else "Backlog on korras.", "findings": findings}
 
@@ -285,7 +299,7 @@ async def run_review(conn: sqlite3.Connection, project_id: int) -> projects.Proj
     payload = build_payload(conn, project_id)
     review = await run_task(REVIEW, payload, check=lambda r: check_review(r, payload))
     # Anything the model still missed after the retry is filled in by rule.
-    extra = [Finding(**_rule_finding(next(s for s in payload["backlog"] if s["key"] == key), kind))
+    extra = [Finding(**_rule_finding(next(s for s in payload["backlog"] if s["key"] == key), kind, payload["language"]))
              for key, kind in uncovered(review, payload)]
     keys = {s["key"] for s in payload["backlog"]}
     valid = [f for f in [*review.findings, *extra]
@@ -362,7 +376,8 @@ def _apply(conn: sqlite3.Connection, project_id: int, finding: dict, kind: str, 
     elif kind == "wording":
         backlog.update_story(conn, project_id, story.id, backlog.StoryPatch(**proposal))
     elif kind == "mockup":
-        tree = mockups.Tree(**TEMPLATES[proposal["template"]][1]).model_copy(update={"title": proposal["title"]})
+        language = projects.get(conn, project_id).language
+        tree = mockups.Tree(**localized(proposal["template"], language)[1]).model_copy(update={"title": proposal["title"]})
         with conn:
             backlog.record_undo(conn, project_id, "mockup_linked", key=story.key)
             mockups.create(conn, project_id, tree, note=f"template:{proposal['template']}", story_id=story.id)

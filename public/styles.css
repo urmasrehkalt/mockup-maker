@@ -692,3 +692,11 @@ dialog.mockup-editor { width: min(1400px, calc(100vw - 24px)); max-height: calc(
 .template-row { margin-top: 0; }
 .template-row select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font: inherit; color: inherit; }
 .new-project .save-template { width: 100%; margin-top: 8px; border-style: dashed; color: var(--muted); }
+
+/* --- languages -------------------------------------------------------- */
+
+.header-tools { display: flex; gap: 8px; align-items: center; }
+.lang-tag { display: inline-block; padding: 0 6px; border-radius: 4px; border: 1px solid var(--border);
+  font-size: 0.7rem; font-weight: 700; color: var(--muted); vertical-align: middle; }
+.new-project select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); font: inherit; color: inherit; }

@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { t } from "./i18n.js";
+import { getLang, setLang, t } from "./i18n.js";
 import { renderProject } from "./views/project.js";
 import { renderProjects } from "./views/projects.js";
 
@@ -27,6 +27,20 @@ async function showAiStatus() {
   }
 }
 
+// The interface language switch: remembered in this browser, applied by redrawing.
+const langSwitch = document.getElementById("lang-switch");
+function showLangSwitch() {
+  langSwitch.textContent = t("lang.switch");
+  langSwitch.lang = getLang() === "et" ? "en" : "et";
+}
+langSwitch.addEventListener("click", () => {
+  setLang(getLang() === "et" ? "en" : "et");
+  showLangSwitch();
+  showAiStatus();
+  route();
+});
+
 window.addEventListener("hashchange", route);
+showLangSwitch();
 route();
 showAiStatus();

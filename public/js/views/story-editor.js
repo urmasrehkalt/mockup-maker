@@ -2,7 +2,7 @@
 
 import { api } from "../api.js";
 import { h, mount } from "../dom.js";
-import { t } from "../i18n.js";
+import { contentText, storyTitle, t } from "../i18n.js";
 import { errorText, issueList, notice, readinessList } from "../ui.js";
 import { storyMockups } from "../mockup/story-mockups.js";
 import { openMergeDialog, openSplitDialog } from "./grooming.js";
@@ -22,7 +22,7 @@ export function openStoryEditor(state, story, reload) {
   };
   const roleName = field("input", { id: "st-role", list: "st-roles", maxlength: 60, required: true, autocomplete: "off" },
     story?.role_name ?? roles[0]?.name);
-  const rolePhrase = field("input", { id: "st-phrase", maxlength: 80, required: true, placeholder: t("editor.phrase_hint") },
+  const rolePhrase = field("input", { id: "st-phrase", maxlength: 80, required: true, placeholder: contentText(project.language, "phraseHint") },
     story?.role_phrase ?? phraseFor(roleName.value));
   const action = field("textarea", { id: "st-action", rows: 2, maxlength: 300, required: true }, story?.action);
   const benefit = field("textarea", { id: "st-benefit", rows: 2, maxlength: 300, required: true }, story?.benefit);
@@ -43,11 +43,9 @@ export function openStoryEditor(state, story, reload) {
 
   const updatePreview = () => {
     const phrase = rolePhrase.value.trim();
-    preview.textContent = t("story.title", {
-      role: phrase ? phrase.charAt(0).toUpperCase() + phrase.slice(1) : "…",
-      action: action.value.trim() || "…",
-      benefit: benefit.value.trim().replace(/\.$/, "") || "…",
-    });
+    preview.textContent = storyTitle({
+      role_phrase: phrase || "…", action: action.value.trim() || "…", benefit: benefit.value.trim() || "…",
+    }, project.language);
   };
   // Suggest the title phrase from an existing story with that role, until the user writes their own.
   let phraseTyped = Boolean(story);
@@ -109,9 +107,9 @@ export function openStoryEditor(state, story, reload) {
     h("datalist", { id: "st-roles" }, roles.map((r) => h("option", { value: r.name }))),
     h("div", { class: "grid-2" },
       h("div", {}, label("st-role", t("editor.role")), roleName),
-      h("div", {}, label("st-phrase", t("editor.phrase")), rolePhrase)),
-    label("st-action", t("editor.action")), action,
-    label("st-benefit", t("editor.benefit")), benefit,
+      h("div", {}, label("st-phrase", contentText(project.language, "phrase")), rolePhrase)),
+    label("st-action", contentText(project.language, "action")), action,
+    label("st-benefit", contentText(project.language, "benefit")), benefit,
     h("div", { class: "preview-box" }, h("span", { class: "hint" }, t("editor.preview")), preview),
     h("div", { class: "grid-2" },
       h("div", {}, label("st-size", t("editor.size")), size),

@@ -147,9 +147,19 @@ class Undo(BaseModel):
     params: dict[str, Any]
 
 
-def title(parts: StoryParts) -> str:
+def title(parts: StoryParts, language: str = "et") -> str:
+    """The Connextra sentence in the project's language.
+
+    Estonian: "<Rollina> soovin <tegevus>, et <kasu>." (role_phrase in the essive).
+    English: "As <a role>, I want to <action>, so that <benefit>." (role_phrase with its article).
+    """
+    benefit = parts.benefit.rstrip(".")
+    if language == "en":
+        phrase = re.sub(r"^as\s+", "", parts.role_phrase, flags=re.IGNORECASE)
+        action = re.sub(r"^to\s+", "", parts.action, flags=re.IGNORECASE)
+        return f"As {phrase}, I want to {action}, so that {benefit}."
     phrase = parts.role_phrase[:1].upper() + parts.role_phrase[1:]
-    return f"{phrase} soovin {parts.action}, et {parts.benefit.rstrip('.')}."
+    return f"{phrase} soovin {parts.action}, et {benefit}."
 
 
 def _clean(items: list[str], limit: int = 500) -> list[str]:
@@ -166,8 +176,9 @@ def _clean(items: list[str], limit: int = 500) -> list[str]:
 def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
     rows = conn.execute("SELECT * FROM stories WHERE project_id = ? ORDER BY position, id",
                         (project_id,)).fetchall()
-    mvp = conn.execute("SELECT mvp_count FROM projects WHERE id = ?", (project_id,)).fetchone()
-    mvp_count = mvp["mvp_count"] if mvp else None
+    project = conn.execute("SELECT mvp_count, language FROM projects WHERE id = ?", (project_id,)).fetchone()
+    mvp_count = project["mvp_count"] if project else None
+    language = project["language"] if project else "et"
     criteria: dict[int, list[Criterion]] = {}
     for row in conn.execute(
             "SELECT c.* FROM criteria c JOIN stories s ON s.id = c.story_id "
@@ -191,7 +202,7 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
         data["open_questions"] = json.loads(data["open_questions"])
         data["needs_view"] = bool(data["needs_view"])
         parts = StoryParts(**{k: data[k] for k in StoryParts.model_fields})
-        story = Story(**data, key=f"US-{data['number']}", title=title(parts),
+        story = Story(**data, key=f"US-{data['number']}", title=title(parts, language),
                       criteria=criteria.get(row["id"], []), mockup_ids=links.get(row["id"], []))
         story.readiness = readiness(story)
         result.append(story)
@@ -200,7 +211,7 @@ def stories(conn: sqlite3.Connection, project_id: int) -> list[Story]:
 
 # --- Definition of Ready ---------------------------------------------------
 
-ACTION_OPENERS = ("soovin ", "tahan ", "i want ", "want to ")
+ACTION_OPENERS = ("soovin ", "tahan ", "i want ", "want to ", "i would like ")
 BENEFIT_OPENERS = ("et ", "selleks et ", "so that ", "in order to ")
 
 
@@ -209,7 +220,7 @@ def connextra_ok(parts: StoryParts) -> bool:
     (the usual slips when a whole sentence is typed into one field)."""
     action, benefit = parts.action.lower(), parts.benefit.lower()
     return (len(parts.role_phrase) >= 2 and len(action) >= 3 and len(benefit) >= 3
-            and "soovin" not in parts.role_phrase.lower()
+            and "soovin" not in parts.role_phrase.lower() and "i want" not in parts.role_phrase.lower()
             and not action.startswith(ACTION_OPENERS) and not benefit.startswith(BENEFIT_OPENERS)
             and ", et " not in action and "so that" not in action)
 
