@@ -8,6 +8,7 @@ and a second failure raises AIError instead of passing on a broken shape.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Generic, TypeVar
 
@@ -18,6 +19,7 @@ from .providers import AIError, AIRequest, Provider
 from .schema import strict_schema
 
 T = TypeVar("T", bound=BaseModel)
+log = logging.getLogger(__name__)
 
 PREAMBLE = (
     "You are the assistant inside Mockup Maker, a tool a project manager uses with a "
@@ -71,11 +73,14 @@ async def run_task(task: Task[T], payload: dict[str, Any],
             feedback = _describe(exc)
         except AIError as exc:
             if exc.code != "ai_invalid_answer":
+                log.warning("AI task %r failed (%s): %s", task.name, exc.code, exc)
                 raise
             feedback = str(exc)
-    raise AIError("ai_invalid_answer",
-                  f"The AI answer for {task.name!r} did not fit the expected format "
-                  f"after {attempt} attempts: {feedback}")
+        log.warning("AI task %r attempt %d rejected: %s", task.name, attempt, feedback)
+    message = (f"The AI answer for {task.name!r} did not fit the expected format "
+               f"after {attempt} attempts: {feedback}")
+    log.error(message)
+    raise AIError("ai_invalid_answer", message)
 
 
 def _describe(exc: ValidationError, limit: int = 10) -> str:

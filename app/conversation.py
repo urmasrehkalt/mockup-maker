@@ -181,7 +181,10 @@ Rules for this turn:
   what the view shows or lets the user do, set component_id to the id of the mockup component that
   shows it; null only when the view cannot show it (e.g. an e-mail is sent). The mockup is a tree
   of components: short unique ids in lowercase with hyphens; only header, card, grid, price_card,
-  form, footer and section have children; set every unused field to null. If
+  form, footer and section have children; a grid may only hold card, price_card and image
+  children, so to place content side by side (for example a photo to the right of buttons) use a
+  grid with columns 2 whose children are cards or images, and put the buttons inside a card;
+  set every unused field to null. If
   INPUT.current_story_detail has a mockup, start from it and keep the ids of what stays. Do not
   repeat criteria the story already has. When INPUT.user_input.kind is "criteria" the user decided
   on the proposal: move to the refinements step and offer next steps such as the next story, a
