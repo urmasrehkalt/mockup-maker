@@ -33,6 +33,12 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   Device frames (`public/js/mockup/frame.js`, browser around desktop, phone around mobile) are
   presentation only, never part of the tree; the PNG gets a browser frame with `frame=true`, its
   address from `mockup_png.site_address()` (frame.js `siteAddress()` must match it)
+- `app/mockup_chat.py`: AI chat beside a mockup, its own task (not a turn). An instruction plus the
+  `base_version` it was made on returns the full new tree and the full criteria of every linked
+  story that must follow; applied at once in one transaction (`record_undo` first, new version with
+  note `ai`, criteria, `check_status`, chat rows in `mockup_messages`). A stale `base_version` is a
+  409; an unchanged tree is a reply without a version. Backlog `undo()` flags the rolled-back
+  messages `undone`. Frontend: `public/js/mockup/chat.js` inside the viewer
 - `app/review.py`: AI backlog review, its own task (not a turn). Findings carry one proposal
   each; `uncovered()` fills rule-known problems the model missed; applying reuses backlog
   split/merge/update so it is checked and undoable

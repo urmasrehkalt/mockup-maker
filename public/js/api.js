@@ -53,6 +53,10 @@ export const api = {
   deleteProjectTemplate: (key) => request("DELETE", `/api/templates/${key}`),
   checkCriteria: (texts) => request("POST", "/api/criteria/check", { texts }),
   mockupVersions: (id, mockupId) => request("GET", `/api/projects/${id}/mockups/${mockupId}/versions`),
+  mockup: (id, mockupId) => request("GET", `/api/projects/${id}/mockups/${mockupId}`),
+  mockupChat: (id, mockupId) => request("GET", `/api/projects/${id}/mockups/${mockupId}/chat`),
+  instructMockup: (id, mockupId, instruction, baseVersion) =>
+    request("POST", `/api/projects/${id}/mockups/${mockupId}/chat`, { instruction, base_version: baseVersion }),
   saveAnnotations: (id, mockupId, annotations) => request("PUT", `/api/projects/${id}/mockups/${mockupId}/annotations`, { annotations }),
   saveMockupVersion: (id, mockupId, tree) => request("POST", `/api/projects/${id}/mockups/${mockupId}/versions`, { tree }),
   restoreVersion: (id, mockupId, number) => request("POST", `/api/projects/${id}/mockups/${mockupId}/versions/${number}/restore`),

@@ -386,6 +386,8 @@ def _restore_mockups(conn: sqlite3.Connection, project_id: int, before: dict) ->
     conn.execute("DELETE FROM mockups WHERE project_id = ? AND id > ?", (project_id, before["newest_mockup"]))
     for mockup_id, latest in before["mockup_versions"].items():
         conn.execute("DELETE FROM mockup_versions WHERE mockup_id = ? AND number > ?", (int(mockup_id), latest))
+        conn.execute("UPDATE mockup_messages SET undone = 1 WHERE mockup_id = ? AND version > ?",
+                     (int(mockup_id), latest))
         title = conn.execute("SELECT tree FROM mockup_versions WHERE mockup_id = ? AND number = ?",
                              (int(mockup_id), latest)).fetchone()
         if title:

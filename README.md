@@ -18,6 +18,7 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 - **Backlog.** Lood on Connextra kujul (roll, tegevus ja kasu eraldi), neil on kriteeriumid, staatus, suurus, avatud küsimused, mockup'id ja päritolu. Lugusid saab käsitsi lisada, muuta, lohistada ja kustutada ning viimaseid muudatusi tagasi võtta. Valmisoleku definitsioon on serveris jõustatud.
 - **Uus vaade kirjeldusest.** Nupp „+ Uus vaade“ laseb vaadet sõnadega kirjeldada (soovi korral mallist lähtudes); AI koostab korraga Connextra loo, vastuvõtukriteeriumid ja mockup'i, mille saab enne backlog'i lisamist üle vaadata ja muuta.
 - **Mockup'id.** Vaade on kindlatest komponentidest koosnev puu, mille rakendus ise joonistab (mitte AI-HTML). Kriteeriumid viitavad mockup'i elementidele, versioonid säilivad, mockup'i saab käsitsi redigeerida, sellele saab joonistada märkmeid ja selle saab alla laadida PNG-na. Nupp „Raam“ näitab arvutivaadet brauseriaknas, mis on vähemalt sülearvuti ekraani kõrgune (16:10) ja mille aadress tehakse projekti ja vaate nimest, ning telefonivaadet päris telefoni mõõtudes; valik jääb brauserisse meelde. Sama valik kehtib PNG ja trackerisse saadetud pildi kohta; need on alati arvutivaates, seega raami korral brauseriaknas. Raam ei ole mockup'i osa.
+- **AI vestlus mockup'i juures.** Mockup'i vaates on sisestusrida, kuhu kirjutatud käsk („Pane foto nuppudest paremale“) muudab mockup'it kohe uue versioonina ja uuendab seotud lugude kriteeriumid. Ühe sammu saab tagasi võtta; vestlusajalugu jääb mockup'i juurde. Kui mockup muutus vahepeal, käsku ei rakendata.
 - **Kliendi täpsustus.** AI koostab muudatusettepaneku, mida näeb enne rakendamist eelvaatena. Server tagab, et muutub ainult valitud lugu.
 - **Groomimine.** Käsitsi jagamine, ühendamine, MVP joon ja alguspunkt ning AI ülevaatus, mille iga leiu saab rakendada, muuta või tähelepanuta jätta. Story map näitab iga rolli happy path'i eraldi real.
 - **Eksport.** Backlog'i saab alla laadida Markdownina (lugemiseks ja jagamiseks) ja CSV-na (tabelarvutusse), mõlemad backlog'i järjekorras koos MVP joonega.
@@ -34,6 +35,7 @@ inimene otsustab: ükski AI ettepanek ei jõua backlog'i ilma kasutaja kinnituse
 | `app/conversation.py` | juhitud vestlus: üks samm ühe kasutaja sisendi kohta, reeglid ja AI juhised, uus vaade kirjeldusest |
 | `app/backlog.py` | lood, kriteeriumid, tagasivõtmine, valmisoleku definitsioon, jagamine ja ühendamine |
 | `app/mockups.py`, `app/mockup_templates.py`, `app/mockup_png.py` | mockup'i komponendid ja reeglid, mallid, versioonid, märkmed ja PNG |
+| `app/mockup_chat.py` | AI vestlus mockup'i juures: käsk, kontrollid, versioon ja kriteeriumide uuendus ühes tehingus |
 | `app/review.py`, `app/testability.py` | AI ülevaatus ja kriteeriumide kontrollitavuse reegel |
 | `app/tracker.py`, `app/templates.py`, `app/projects.py`, `app/db.py` | trackerisse saatmine, projektimallid, projektid ja andmebaas (SQLite, migratsioonid) |
 | `app/export.py` | backlog'i eksport Markdowni ja CSV-sse |

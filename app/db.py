@@ -164,6 +164,19 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE projects ADD COLUMN language TEXT NOT NULL DEFAULT 'et' CHECK (language IN ('et', 'en'));
     """,
+    # 14: the AI chat beside a mockup; `version` is the version an assistant answer created
+    """
+    CREATE TABLE mockup_messages (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        mockup_id   INTEGER NOT NULL REFERENCES mockups(id) ON DELETE CASCADE,
+        role        TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        text        TEXT NOT NULL,
+        version     INTEGER,
+        story_keys  TEXT NOT NULL DEFAULT '[]',
+        undone      INTEGER NOT NULL DEFAULT 0,
+        created_at  TEXT NOT NULL
+    );
+    """,
 ]
 
 

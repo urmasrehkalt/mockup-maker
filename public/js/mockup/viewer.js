@@ -6,6 +6,7 @@ import { h, mount } from "../dom.js";
 import { formatDateTime, t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 import { createArtboard } from "./annotations.js";
+import { mockupChat } from "./chat.js";
 import { openMockupEditor } from "./editor.js";
 import { browserFrame, frameOn, frameToggle, phoneFrame, siteAddress } from "./frame.js";
 import { renderTree } from "./render.js";
@@ -39,7 +40,23 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
   const markButton = projectId && mockup.id ? h("button", { type: "button", class: "small",
     onclick: () => { annotating = true; viewport = "desktop"; draw(); } }, `✎ ${t("marks.button")}`) : null;
 
+  // The AI chat works on the newest version only; it takes the viewer's state back from the server.
+  const chat = projectId && mockup.id ? mockupChat({
+    projectId, mockupId: mockup.id, getVersion: () => latest,
+    onApplied: (saved) => adopt(saved),
+    onRefresh: async () => adopt(await api.mockup(projectId, mockup.id)),
+  }) : null;
+
+  async function adopt(saved) {
+    shown = { number: saved.version, tree: saved.tree, annotations: saved.annotations ?? [] };
+    latest = saved.version;
+    await onChange?.();
+    await loadVersions();
+    draw();
+  }
+
   function draw() {
+    chat?.setEnabled(shown.number === latest && !annotating);
     if (download) download.href = `/api/projects/${projectId}/mockups/${mockup.id}/png?version=${shown.number}${framed ? "&frame=true" : ""}`;
     if (markButton) markButton.disabled = annotating || shown.number !== latest;
     toggles.forEach((b, i) => b.setAttribute("aria-pressed", String(["desktop", "mobile"][i] === viewport)));
@@ -115,7 +132,8 @@ export function openMockupViewer(mockup, { projectId = null, onChange = null, sh
         openMockupEditor({ ...mockup, tree: shown.tree }, { projectId, sharedWith, onSaved: onChange, language, projectName });
       } }, `✎ ${t("mockup.edit")}`) : null,
       h("button", { type: "button", class: "small", onclick: close }, t("mockup.close"))),
-    h("div", { class: "viewer-body" }, stage, projectId && mockup.id ? side : null));
+    h("div", { class: "viewer-body" }, h("div", { class: "viewer-main" }, stage, chat?.element),
+      projectId && mockup.id ? side : null));
   dialog.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
   document.body.append(dialog);
   draw();
@@ -130,6 +148,7 @@ function noteLabel(note) {
     case "template": return t("mockup.note_template");
     case "proposal": return t("mockup.note_proposal");
     case "change": return t("mockup.note_change");
+    case "ai": return t("mockup.note_ai");
     case "restore": return t("mockup.note_restore", { version: detail });
     default: return t("mockup.note_manual");
   }

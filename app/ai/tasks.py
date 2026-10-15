@@ -48,25 +48,26 @@ def build_prompt(task: Task, payload: dict[str, Any], feedback: str | None = Non
 
 async def run_task(task: Task[T], payload: dict[str, Any],
                    provider: Provider | None = None,
-                   check: Callable[[T], str | None] | None = None) -> T:
+                   check: Callable[[T], str | None] | None = None,
+                   attempts: int = 2) -> T:
     """Run a task and return its validated answer.
 
     `check` is a soft, state-aware rule on top of the shape: a problem it
     reports is sent back for one retry, but if the model insists the answer is
     returned anyway and the caller applies its own fallback. Shape errors are
-    hard: they never reach the caller.
+    hard: they never reach the caller. `attempts` is how many times the model may try.
     """
     provider = provider or providers.get()
     schema = strict_schema(task.response)
     feedback = None
-    for attempt in (1, 2):
+    for attempt in range(1, attempts + 1):
         request = AIRequest(prompt=build_prompt(task, payload, feedback), schema=schema,
                             mock_answer=lambda: task.mock(payload))
         try:
             answer = await provider.run(request)
             result = task.response.model_validate(answer)
             problem = check(result) if check else None
-            if problem is None or attempt == 2:
+            if problem is None or attempt == attempts:
                 return result
             feedback = f"- {problem}"
         except ValidationError as exc:

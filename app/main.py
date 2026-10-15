@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import backlog, config, conversation, db, export, mockups, projects, review, templates, testability, tracker
+from . import backlog, config, conversation, db, export, mockup_chat, mockups, projects, review, templates, testability, tracker
 from .ai import AIError
 
 # How each AI failure reaches the client: disabled and unavailable are the
@@ -47,6 +47,7 @@ app.include_router(projects.router)
 app.include_router(conversation.router)
 app.include_router(backlog.router)
 app.include_router(mockups.router)
+app.include_router(mockup_chat.router)
 app.include_router(testability.router)
 app.include_router(review.router)
 app.include_router(tracker.router)
