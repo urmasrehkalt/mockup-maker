@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { errorText, notice } from "../ui.js";
 import { backlogPanel } from "./backlog.js";
 import { conversation } from "./chat.js";
+import { ideasSection } from "./ideas.js";
 
 const STEPS = ["idea", "roles", "stories", "priorities", "criteria", "refinements", "grooming"];
 
@@ -90,6 +91,10 @@ class ProjectPage {
     await this.queueAction(() => api.removeTurn(this.state.project.id, item.id));
   }
 
+  async decideIdea(ideaId, decision) {
+    await this.queueAction(() => api.decideIdea(this.state.project.id, ideaId, decision));
+  }
+
   async queueAction(work) {
     try {
       this.state = await work();
@@ -144,6 +149,14 @@ class ProjectPage {
     if (this.current) this.draw();
   }
 
+  // The backlog panel, with the client's ideas below its list.
+  backlog() {
+    const panel = backlogPanel(this.state, () => this.reload(), () => this.send({ kind: "review" }),
+      (input) => this.send(input));
+    panel.append(ideasSection(this.state, (input) => this.send(input), () => this.reload()));
+    return panel;
+  }
+
   draw() {
     const { project } = this.state;
     const box = this.view.querySelector(".composer textarea");
@@ -159,9 +172,9 @@ class ProjectPage {
       h("div", { class: "workspace" },
         conversation(this.state, (input) => this.send(input),
           { pending: this.pending, error: this.error, slow: this.slow,
-            onRetry: (item) => this.retryTurn(item), onRemove: (item) => this.removeTurn(item) }),
-        backlogPanel(this.state, () => this.reload(), () => this.send({ kind: "review" }),
-          (input) => this.send(input))));
+            onRetry: (item) => this.retryTurn(item), onRemove: (item) => this.removeTurn(item),
+            onPark: (ideaId) => this.decideIdea(ideaId, "park") }),
+        this.backlog()));
     const next = this.view.querySelector(".composer textarea");
     // What the user was typing survives a redraw, and so does their place in the box.
     const draft = typing?.value || this.restoreDraft;

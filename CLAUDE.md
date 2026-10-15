@@ -43,6 +43,15 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   Device frames (`public/js/mockup/frame.js`, browser around desktop, phone around mobile) are
   presentation only, never part of the tree; the PNG gets a browser frame with `frame=true`, its
   address from `mockup_png.site_address()` (frame.js `siteAddress()` must match it)
+- `app/ideas.py`: the client's thoughts. After the idea step the AI classifies free text
+  (`Turn.intent`: answer, refinement, new_view, later, question, other; the payload's
+  `classify_text` says when). A refinement of the chosen story at the refinements step stays a
+  `change` card; any other refinement, a new view or a thought for later gets an `idea` card, and
+  the thought is stored at once as an open idea (`ideas`), so ignoring the card loses nothing and
+  nothing in the backlog changes. `IdeaInput` (new_view / refine) goes through the normal turn
+  (`_effective_input` turns it into the `new_view` / `refine` input); park and dismiss are REST
+  (`PUT /ideas/{id}/decision`), `POST /ideas` adds one by hand. Open ideas are in `ProjectState.ideas`
+  and the Markdown export
 - `app/mockup_chat.py`: AI chat beside a mockup, its own task (not a turn). An instruction plus the
   `base_version` it was made on returns the full new tree and the full criteria of every linked
   story that must follow; applied at once in one transaction (`record_undo` first, new version with

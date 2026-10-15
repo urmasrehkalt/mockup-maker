@@ -40,11 +40,13 @@ const RESUME = {
  * @param state   project state from the API
  * @param send    async (input) => void, queues one input
  * @param options { pending, error, slow } for a blocking request (the backlog review);
- *                { onRetry(item), onRemove(item) } for inputs that failed in the queue
+ *                { onRetry(item), onRemove(item) } for inputs that failed in the queue,
+ *                onPark(ideaId) for the idea card's "later" (no AI involved)
  */
 export function conversation(state, send, { pending = false, error = null, slow = false,
-  onRetry = () => {}, onRemove = () => {} } = {}) {
+  onRetry = () => {}, onRemove = () => {}, onPark = () => {} } = {}) {
   contentLanguage = state.project.language;
+  parkIdea = onPark;
   loadTemplates(contentLanguage);
   const { messages } = state;
   const queue = state.queue ?? [];
@@ -54,7 +56,9 @@ export function conversation(state, send, { pending = false, error = null, slow 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const live = !pending && last && last === lastAssistant ? last : null;
   // A card whose decision is already in the queue cannot be decided twice.
-  const deciding = new Set(waiting.map((item) => item.input.message_id).filter((id) => id != null));
+  const cardOf = (input) => input.message_id ?? (input.kind === "idea"
+    ? (state.ideas ?? []).find((idea) => idea.id === input.idea_id)?.message_id : null);
+  const deciding = new Set(waiting.map((item) => cardOf(item.input)).filter((id) => id != null));
   const queuedLabels = new Set(waiting.filter((item) => item.input.kind === "next").map((item) => item.input.label));
   const working = waiting.find((item) => item.status === "running") ?? waiting[0];
 
@@ -100,6 +104,13 @@ function userMessage(message) {
     case "refine": text = t("chat.refine_other", { text: input.text }); break;
     case "review": text = t("review.request"); break;
     case "new_view": text = t("newview.request", { text: input.text }); break;
+    case "idea": {
+      const idea = message.content.idea_text;
+      text = input.decision === "new_view"
+        ? (idea ? t("ideas.request_new_view", { text: idea }) : t("ideas.request_new_view_plain"))
+        : (idea ? t("ideas.request_refine", { text: idea }) : t("ideas.request_refine_plain"));
+      break;
+    }
     default: text = message.content.text ?? "";
   }
   return h("div", { class: "message user" }, author("user"), h("p", {}, text));
@@ -143,6 +154,7 @@ function assistantMessage(message, live, send, state, deciding = false, queuedLa
     c.change ? changeCard(message, live, send, state) : null,
     c.review ? reviewCard(message, send, templates, contentLanguage) : null,
     c.new_view ? newViewCard(message, live, send, state) : null,
+    c.idea ? ideaCard(message, send, state) : null,
     live && c.next_steps?.length ? nextSteps(c.next_steps, send, queuedLabels) : null);
 }
 
@@ -247,6 +259,7 @@ function rolesCard(message, live, send, state) {
 // --- stories -------------------------------------------------------------
 
 let contentLanguage = "et"; // the current project's; set on every render
+let parkIdea = () => {}; // set on every render: leaves an idea for later
 const storyTitle = (story) => composeTitle(story, contentLanguage);
 
 function storiesCard(message, live, send) {
@@ -410,6 +423,38 @@ function criterionRow(row, redraw, highlight, drop) {
 }
 
 // --- a new view described in words ------------------------------------------
+
+// A thought of the client's that is not an answer: the AI's recommendation, and the user's choice.
+// The thought is already kept in the ideas list, so ignoring the card loses nothing.
+function ideaCard(message, send, state) {
+  const idea = message.content.idea;
+  const heading = h("div", { class: "card-title" }, t("ideas.card_title"));
+  const open = (state.ideas ?? []).some((i) => i.id === idea.idea_id);
+  if (idea.decided || !open) {
+    let summary;
+    switch (idea.decided?.choice) {
+      case "new_view": summary = t("ideas.decided_new_view"); break;
+      case "refine": summary = t("ideas.decided_refine"); break;
+      case "park": summary = t("ideas.decided_park"); break;
+      case "dismiss": summary = t("ideas.decided_dismiss"); break;
+      default: summary = t("ideas.closed");
+    }
+    return h("div", { class: "card-block answered idea-card" }, heading,
+      h("p", { class: "idea-text" }, idea.text), h("p", { class: "muted" }, summary));
+  }
+  const choices = [
+    { key: "new_view", label: t("ideas.card_view"), run: () => send({ kind: "idea", idea_id: idea.idea_id, decision: "new_view" }) },
+    idea.story_key ? { key: "refine", label: t("ideas.card_refine", { key: idea.story_key }),
+      run: () => send({ kind: "idea", idea_id: idea.idea_id, decision: "refine" }) } : null,
+    { key: "park", label: t("ideas.park"), run: () => parkIdea(idea.idea_id) },
+  ].filter(Boolean);
+  return h("div", { class: "card-block idea-card" }, heading,
+    h("p", { class: "idea-text" }, idea.text),
+    h("p", { class: "muted" }, `${t("ideas.recommended")}: ${idea.reason}`),
+    h("div", { class: "choices" }, choices.map((choice) => h("button", {
+      type: "button", class: choice.key === idea.recommended ? "choice primary" : "choice", onclick: choice.run,
+    }, choice.label))));
+}
 
 function newViewCard(message, live, send, state) {
   const v = message.content.new_view;

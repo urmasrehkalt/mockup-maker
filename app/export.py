@@ -21,14 +21,14 @@ WORDS = {
            "mvp": "MVP joon: ülal olevad lood on esimeses versioonis", "status": "Staatus", "size": "Suurus",
            "role": "Roll", "criteria": "Vastuvõtukriteeriumid", "no_criteria": "Kriteeriumid puuduvad.",
            "questions": "Avatud küsimused", "notes": "Märkused", "mockups": "Mockup'id", "origin": "Päritolu",
-           "origin_ai": "AI ettepanek", "origin_manual": "käsitsi", "in_mvp": "MVP", "yes": "jah", "no": "ei",
+           "origin_ai": "AI ettepanek", "origin_manual": "käsitsi", "ideas": "Avatud ideed", "in_mvp": "MVP", "yes": "jah", "no": "ei",
            "statuses": {"idea": "Idee", "needs_clarification": "Vajab täpsustamist", "reviewed": "Läbivaadatud",
                         "ready": "Valmis arenduseks"}},
     "en": {"exported": "Backlog exported from Mockup Maker", "language": "Language", "stories": "Stories",
            "mvp": "MVP line: the stories above it are in the first version", "status": "Status", "size": "Size",
            "role": "Role", "criteria": "Acceptance criteria", "no_criteria": "No criteria.",
            "questions": "Open questions", "notes": "Notes", "mockups": "Mockups", "origin": "Origin",
-           "origin_ai": "AI proposal", "origin_manual": "manual", "in_mvp": "MVP", "yes": "yes", "no": "no",
+           "origin_ai": "AI proposal", "origin_manual": "manual", "ideas": "Open ideas", "in_mvp": "MVP", "yes": "yes", "no": "no",
            "statuses": {"idea": "Idea", "needs_clarification": "Needs clarification", "reviewed": "Reviewed",
                         "ready": "Ready for development"}},
 }
@@ -69,6 +69,9 @@ def markdown(conn: sqlite3.Connection, project_id: int) -> str:
             lines += [f"**{w['mockups']}:** " + ", ".join(titles.get(m, str(m)) for m in story.mockup_ids), ""]
     if project.mvp_count is not None and project.mvp_count >= len(stories):
         lines += ["---", "", f"**{w['mvp']}**", ""]
+    ideas = projects.open_ideas(conn, project_id)
+    if ideas:
+        lines += [f"## {w['ideas']}", "", *[f"- {' '.join(idea.text.split())}" for idea in ideas], ""]
     return "\n".join(lines).rstrip() + "\n"
 
 

@@ -258,6 +258,15 @@ label { display: block; font-size: 0.875rem; font-weight: 600; margin: 12px 0 4p
 @media (prefers-reduced-motion: reduce) { .thinking p { animation: none; } }
 
 .conversation.busy .choices button, .conversation.busy .card-block button { pointer-events: none; opacity: 0.55; }
+/* The client's ideas: beside the backlog and as a card in the conversation. */
+.ideas { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ideas h3 { margin: 0 0 8px; font-size: 0.95rem; }
+.idea-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.idea { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.idea p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.idea-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.idea-card .idea-text { margin: 0 0 4px; font-style: italic; overflow-wrap: anywhere; }
+
 /* A card whose decision waits in the queue, and an input waiting for its turn. */
 .message.deciding .choices button, .message.deciding .card-block button { pointer-events: none; opacity: 0.55; }
 .message.user.queued { opacity: 0.7; }

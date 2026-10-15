@@ -97,6 +97,14 @@ class QueueItem(BaseModel):
     created_at: str
 
 
+class Idea(BaseModel):
+    """A thought of the client's that is not in the backlog (yet)."""
+    id: int
+    text: str
+    message_id: int | None = None
+    created_at: str
+
+
 class ProjectState(BaseModel):
     project: Project
     roles: list[Role]
@@ -106,6 +114,7 @@ class ProjectState(BaseModel):
     messages: list[Message]
     resume: Resume
     queue: list[QueueItem] = []
+    ideas: list[Idea] = []
 
 
 # --- storage -------------------------------------------------------------
@@ -216,6 +225,12 @@ def resume(project: Project, history: list[Message]) -> Resume:
     return Resume(step=project.step, kind="continue", actions=RESUME_ACTIONS[project.step])
 
 
+def open_ideas(conn: sqlite3.Connection, project_id: int) -> list[Idea]:
+    return [Idea(id=r["id"], text=r["text"], message_id=r["message_id"], created_at=r["created_at"])
+            for r in conn.execute("SELECT * FROM ideas WHERE project_id = ? AND status = 'open' ORDER BY id",
+                                  (project_id,))]
+
+
 def queue(conn: sqlite3.Connection, project_id: int) -> list[QueueItem]:
     return [QueueItem(id=r["id"], status=r["status"], input=json.loads(r["input"]),
                       error_code=r["error_code"], error_message=r["error_message"],
@@ -230,7 +245,8 @@ def state(conn: sqlite3.Connection, project_id: int) -> ProjectState:
                         stories=backlog.stories(conn, project_id),
                         mockups=mockups.mockups(conn, project_id),
                         undo=backlog.last_undo(conn, project_id), messages=history,
-                        resume=resume(project, history), queue=queue(conn, project_id))
+                        resume=resume(project, history), queue=queue(conn, project_id),
+                        ideas=open_ideas(conn, project_id))
 
 
 # --- API -----------------------------------------------------------------

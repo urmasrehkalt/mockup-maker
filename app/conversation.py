@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from . import backlog, db, mockups, projects, testability
+from . import backlog, db, ideas, mockups, projects, testability
 from .ai import Task, run_task
 from .mockup_templates import TEMPLATES, localized
 from .projects import Role, Step
@@ -112,6 +112,15 @@ class NextStep(_Strict):
     step: Step | None
 
 
+Intent = Literal["answer", "refinement", "new_view", "later", "question", "other"]
+
+
+class IdeaCard(_Strict):
+    """The AI's reading of a free-text thought that is not an answer: what it recommends doing with it."""
+    recommended: Literal["new_view", "refine", "park"]
+    reason: str = Field(min_length=1, max_length=300)
+
+
 class Turn(_Strict):
     message: str = Field(min_length=1, max_length=2000)
     step: Step
@@ -124,15 +133,17 @@ class Turn(_Strict):
     proposal: Proposal | None = None
     change: Change | None = None
     new_view: NewView | None = None
+    intent: Intent | None = None
+    idea: IdeaCard | None = None
     next_steps: list[NextStep] = Field(min_length=1, max_length=4)
 
     @model_validator(mode="after")
     def _one_card_and_a_way_on(self):
         cards = (self.question, self.roles, self.stories, self.priority, self.proposal, self.change,
-                 self.new_view)
+                 self.new_view, self.idea)
         if sum(1 for card in cards if card) > 1:
             raise ValueError("one card per turn: a question, roles, stories, a priority, a "
-                             "proposal or a change, not several")
+                             "proposal, a change or an idea, not several")
         if not any(s.kind == "reply" for s in self.next_steps):
             raise ValueError("next_steps needs at least one option of kind 'reply'")
         return self
@@ -218,6 +229,24 @@ Rules for this turn:
   answers it, put a short summary of that answer in `interpreted_answer`; otherwise null. If the
   text states a requirement or decision that is not that answer, summarise it in `noted_fact` so it
   is kept with the project state (not for the first description, INPUT.idea); otherwise null.
+- Classifying free text: when INPUT.classify_text is true, set `intent` to what the text is.
+  "answer": it answers INPUT.open_question. "refinement": the client's remark about a story.
+  "new_view": a view the backlog does not have yet. "later": a thought the client wants to keep for
+  later, or that does not belong to the current work. "question": a question about the project,
+  answered in `message`. "other": steering the conversation (asking for different roles or stories,
+  moving on). Leave `intent` and `idea` null when INPUT.classify_text is false.
+  A refinement of INPUT.current_story at the refinements step is turned into `change` as described
+  above, with no idea card. A remark that does not concern the chosen story (it is about another
+  story or a view the backlog does not have) is not a refinement of it: classify it as "new_view" or
+  "later" and return the idea card. Any other "refinement", "new_view" and "later" get an
+  `idea` card and no other card: `recommended` is "new_view" for a new view, "refine" for a
+  refinement when INPUT.current_story is chosen (otherwise "park"), "park" for "later"; `reason` is
+  one short sentence why. The server keeps the thought as an idea; the user decides what becomes of
+  it, so do not claim anything was added or changed. Leave `noted_fact` null when you return an idea
+  card. When INPUT.user_input.kind is "refine" or "new_view" for a parked idea, handle it as above.
+- Suggestions: when a decision just finished a step, `message` may add one or two concrete
+  observations from INPUT (a role in INPUT.roles that no story in INPUT.backlog covers, a story whose
+  missing_for_ready lists criteria_testable or mockup). Only what INPUT shows; never invent.
 - `step` is the step the process is in after this turn.
 - Always end with 1 to 4 `next_steps`, the recommended one first; at least one of kind "reply".
   Next steps are moves in the conversation (e.g. suggest different roles, move to a step); never
@@ -314,13 +343,21 @@ class ViewAddInput(_Strict):
     items: list[CriteriaItem] = Field(default_factory=list, max_length=15)
 
 
+class IdeaInput(_Strict):
+    """Turn a parked idea into a new view or a refinement of a story (the chosen one by default)."""
+    kind: Literal["idea"]
+    idea_id: int
+    decision: Literal["new_view", "refine"]
+    story_id: int | None = None
+
+
 class RetryInput(_Strict):
     kind: Literal["retry"]
 
 
 UserInput = Annotated[TextInput | AnswerInput | RolesInput | StoriesInput | FocusInput
                       | CriteriaInput | ChangeInput | RefineInput | NewViewInput | ViewAddInput
-                      | NextInput | RetryInput,
+                      | IdeaInput | NextInput | RetryInput,
                       Field(discriminator="kind")]
 
 
@@ -344,6 +381,7 @@ def apply_input(conn: sqlite3.Connection, project_id: int, data: Any) -> project
     if data.kind == "retry":
         return open_question(projects.messages(conn, project_id))
 
+    extra: dict[str, Any] = {}
     with conn:
         if data.kind == "answer":
             message = projects.get_message(conn, project_id, data.message_id)
@@ -411,13 +449,41 @@ def apply_input(conn: sqlite3.Connection, project_id: int, data: Any) -> project
             story = backlog.get_story(conn, project_id, data.story_id)
             conn.execute("UPDATE projects SET current_story_id = ?, step = 'refinements' WHERE id = ?",
                          (story.id, project_id))
+        elif data.kind == "idea":
+            extra["idea_text"] = _apply_idea(conn, project_id, data)
         elif data.kind == "next" and data.step:
             conn.execute("UPDATE projects SET step = ? WHERE id = ?", (data.step, project_id))
 
     if data.kind == "text":
         conn.execute("UPDATE projects SET draft_idea = '' WHERE id = ?", (project_id,))  # it was sent
-    projects.add_message(conn, project_id, "user", {"input": data.model_dump()})
+    projects.add_message(conn, project_id, "user", {"input": data.model_dump(), **extra})
     return open_question(projects.messages(conn, project_id))
+
+
+def _apply_idea(conn: sqlite3.Connection, project_id: int, data: IdeaInput) -> str:
+    """The user turned a parked idea into a view or a refinement: close the idea, and for a
+    refinement make its story the chosen one. Returns the idea's text. Inside the input's transaction."""
+    if data.decision == "refine":
+        story_id = data.story_id or projects.get(conn, project_id).current_story_id
+        if story_id is None:
+            raise HTTPException(422, {"code": "no_story", "message": "Choose the story to refine first."})
+        story = backlog.get_story(conn, project_id, story_id)
+        text = ideas.convert(conn, project_id, data.idea_id, "refinement")
+        conn.execute("UPDATE projects SET current_story_id = ?, step = 'refinements' WHERE id = ?",
+                     (story.id, project_id))
+        return text
+    return ideas.convert(conn, project_id, data.idea_id, "new_view")
+
+
+def _effective_input(conn: sqlite3.Connection, project_id: int, data: Any) -> Any:
+    """What the AI is asked to do. A parked idea becomes the new view or the refinement it was turned into."""
+    if data.kind != "idea":
+        return data
+    text = ideas.get(conn, project_id, data.idea_id)["text"]
+    if data.decision == "new_view":
+        return NewViewInput(kind="new_view", text=text[:1000])
+    story_id = data.story_id or projects.get(conn, project_id).current_story_id
+    return RefineInput(kind="refine", story_id=story_id, text=text[:2000])
 
 
 def describe(message: projects.Message) -> str:
@@ -469,6 +535,9 @@ def describe(message: projects.Message) -> str:
             return f"Asked for a separate change: {data['text']}"
         case "review":
             return "Asked for a backlog review"
+        case "idea":
+            what = "a new view" if data["decision"] == "new_view" else "a refinement of the chosen story"
+            return f"Turned the client's parked idea into {what}: {content.get('idea_text', '')}"
         case "next":
             return f"Chose: {data['label']}"
         case _:
@@ -497,6 +566,8 @@ def build_payload(conn: sqlite3.Connection, project_id: int, data: Any,
         "recent_messages": [{"role": m.role, "text": describe(m)}
                             for m in history[-RECENT_MESSAGES:]],
         "user_input": data.model_dump(),
+        # free text after the idea step is classified (`intent`), and an idea card may follow
+        "classify_text": data.kind == "text" and project.step != "idea",
         # a new view's chosen starting template, in the project's language
         "template": (localized(data.template, project.language)[1]
                      if data.kind == "new_view" and data.template else None),
@@ -512,6 +583,35 @@ MOCK_HAPPY_PATH = [
     ("saada liitumise kohta kinnitus e-postiga", "oleksin kindel, et liitumine õnnestus"),
     ("näha oma paketi andmeid ja kehtivust", "teaksin, milleks mul õigus on"),
 ]
+
+
+def mock_intent(payload: dict[str, Any], base: dict[str, Any], reply) -> dict[str, Any] | None:
+    """Classify a free-text thought by keyword. Returns the whole answer for the cases that are not
+    handled by the step (a thought for later, a new view, a question); otherwise sets base["intent"]."""
+    text = payload["user_input"]["text"].casefold()
+    current, step = payload.get("current_story"), payload["step"]
+    park = reply("Jätka")
+    if "hiljem" in text or "later" in text:
+        return {**base, "intent": "later", "step": step, "message": "Panen selle hilisemaks kõrvale.",
+                "idea": {"recommended": "park", "reason": "Sellest saab hiljem eraldi vaade või täpsustus."},
+                "next_steps": [park]}
+    if any(words in text for words in ("uus vaade", "uue vaate", "uut vaadet", "new view")):
+        return {**base, "intent": "new_view", "step": step, "message": "See kõlab uue vaatena.",
+                "idea": {"recommended": "new_view", "reason": "Kirjeldab vaadet, mida backlog'is veel ei ole."},
+                "next_steps": [park]}
+    if "täpsusta" in text:
+        if current and step == "refinements":
+            base["intent"] = "refinement"
+            return None
+        return {**base, "intent": "refinement", "step": step, "message": "See on täpsustus.",
+                "idea": {"recommended": "refine" if current else "park",
+                         "reason": "Kliendi täpsustus loo kohta." if current else "Valitud lugu pole veel."},
+                "next_steps": [park]}
+    if text.rstrip().endswith("?"):
+        return {**base, "intent": "question", "step": step, "message": "Hea küsimus. Vastan selle põhjal, mis projektis on.",
+                "next_steps": [park]}
+    base["intent"] = "refinement" if current and step == "refinements" else "other"
+    return None
 
 
 def mock_turn(payload: dict[str, Any]) -> dict[str, Any]:
@@ -535,6 +635,11 @@ def mock_turn(payload: dict[str, Any]) -> dict[str, Any]:
     if payload["open_question"] and data["kind"] == "text":
         base["interpreted_answer"] = data["text"][:300]
         answered += 1
+        base["intent"] = "answer"
+    elif payload.get("classify_text"):
+        early = mock_intent(payload, base, reply)
+        if early:
+            return early
 
     if data["kind"] == "change":
         return {**base, "step": "refinements",
@@ -608,8 +713,42 @@ def mock_turn(payload: dict[str, Any]) -> dict[str, Any]:
                                             "step": None}]}
 
 
+def _check_intent(turn: Turn, payload: dict[str, Any]) -> str | None:
+    """A free-text thought is classified; what is not an answer or a plain refinement of the
+    chosen story becomes an idea card the user decides on."""
+    if not payload.get("classify_text"):
+        return "An idea card is only for the user's free text after the idea step." if turn.idea else None
+    intent = turn.intent
+    if intent is None:
+        return ("Set `intent` to what the user's text is: answer, refinement, new_view, later, "
+                "question or other.")
+    if intent == "answer" and not payload["open_question"]:
+        return "intent is 'answer' but INPUT.open_question is null; classify the text as something else."
+    if intent in ("answer", "question", "other"):
+        return f"intent {intent!r} takes no idea card." if turn.idea else None
+    current = payload.get("current_story")
+    if intent == "refinement" and current and payload["step"] == "refinements":
+        if turn.idea or not turn.change:
+            return (f"The text is a refinement of the chosen story {current}: return it in `change`, "
+                    "not as an idea card. If it does not concern that story at all, it is not a "
+                    "refinement of it: classify it as new_view or later and return an idea card.")
+        return None
+    if turn.change:
+        return f"`change` is only for a refinement of the chosen story at the refinements step, not intent {intent!r}."
+    expected = {"later": "park", "new_view": "new_view",
+                "refinement": "refine" if current else "park"}[intent]
+    if not turn.idea:
+        return f"The text is intent {intent!r}: return an `idea` card with recommended {expected!r}."
+    if turn.idea.recommended != expected:
+        return f"For intent {intent!r} the idea card recommends {expected!r}, not {turn.idea.recommended!r}."
+    return None
+
+
 def check_turn(turn: Turn, payload: dict[str, Any]) -> str | None:
     """Process rules that depend on the project's state, not only the answer's shape."""
+    problem = _check_intent(turn, payload)
+    if problem:
+        return problem
     asked = payload["clarifications_asked"]
     if turn.question and asked >= MAX_CLARIFICATIONS:
         return (f"{asked} clarifying questions were already asked, the maximum is "
@@ -1061,6 +1200,8 @@ TURN = Task(name="turn", instructions=INSTRUCTIONS, response=Turn, mock=mock_tur
 async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> projects.ProjectState:
     projects.get(conn, project_id)
     pending = apply_input(conn, project_id, data)
+    asked = data  # what the user did; the AI is asked about `data`, which an idea turns into a view or refinement
+    data = _effective_input(conn, project_id, data)
     payload = build_payload(conn, project_id, data, pending)
     turn = await run_task(TURN, payload, check=lambda answer: check_turn(answer, payload))
 
@@ -1077,8 +1218,11 @@ async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> pro
         if data.kind == "text" and turn.noted_fact and data.text != payload["idea"]:
             projects.add_clarification(conn, project_id, None, NOTE, turn.noted_fact)
         conn.execute("UPDATE projects SET step = ? WHERE id = ?", (turn.step, project_id))
-    projects.add_message(conn, project_id, "assistant", {
+    idea = _stored_idea(conn, project_id, asked, turn) if turn.idea and asked.kind == "text" else None
+    message = projects.add_message(conn, project_id, "assistant", {
         "text": turn.message,
+        "intent": turn.intent if asked.kind == "text" else None,
+        "idea": idea,
         "step": turn.step,
         "question": turn.question.model_dump() if turn.question else None,
         "roles": [r.model_dump() for r in turn.roles] if turn.roles else None,
@@ -1089,4 +1233,17 @@ async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> pro
         "new_view": _stored_new_view(turn.new_view) if turn.new_view else None,
         "next_steps": [s.model_dump() for s in turn.next_steps],
     })
+    if idea:
+        with conn:
+            ideas.attach_card(conn, idea["idea_id"], message.id)
     return projects.state(conn, project_id)
+
+
+def _stored_idea(conn: sqlite3.Connection, project_id: int, asked: Any, turn: Turn) -> dict[str, Any]:
+    """The idea card as stored. The thought itself is kept at once as an open idea, so it is not
+    lost if the card is ignored; nothing in the backlog changes before the user chooses."""
+    text = " ".join(asked.text.split())[:1000]
+    with conn:
+        idea_id = ideas.create(conn, project_id, text)
+    project = projects.get(conn, project_id)
+    return {"idea_id": idea_id, "text": text, **turn.idea.model_dump(), "story_key": _current_key(conn, project)}

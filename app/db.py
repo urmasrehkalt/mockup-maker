@@ -189,6 +189,19 @@ MIGRATIONS: list[str] = [
         created_at     TEXT NOT NULL
     );
     """,
+    # 16: ideas the client had along the way, kept until they become a view or a refinement
+    """
+    CREATE TABLE ideas (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        text          TEXT NOT NULL,
+        status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'converted', 'dismissed')),
+        converted_to  TEXT CHECK (converted_to IN ('new_view', 'refinement')),
+        message_id    INTEGER,
+        created_at    TEXT NOT NULL,
+        resolved_at   TEXT
+    );
+    """,
 ]
 
 
