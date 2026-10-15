@@ -51,10 +51,10 @@ INPUT.stories are the stories the mockup belongs to, with their acceptance crite
 - Return `mockup`: the FULL tree after the change, starting from INPUT.mockup.tree. Keep the ids of
   everything that stays, give new components short unique ids in lowercase with hyphens, and do
   not change what the instruction does not mention. Only header, card, grid, price_card, form,
-  footer and section have children; set every unused field to null. A grid may only hold card,
-  price_card and image children, so to place content side by side (for example a photo to the
-  right of buttons) use a grid with columns 2 whose children are cards or images, and put the
-  buttons inside a card.
+  footer, section and row have children; set every unused field to null. A grid may only hold card,
+  price_card and image children (equal cards), so to place content side by side (for example a photo
+  to the right of buttons) use a row with 2 to 4 children of any type, such as a section of buttons
+  and an image.
 - Return `criteria`: for every story in INPUT.stories whose criteria must follow the change (a
   criterion about a component you removed, renamed or replaced, or a new thing the story should
   check), an entry with story_key and the story's FULL criteria list after the change. Keep the

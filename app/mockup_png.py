@@ -235,6 +235,16 @@ class Painter:
             y += rh + gap
         return y - top - gap if children else 0
 
+    def c_row(self, n, x, y, w):
+        """Children side by side in equal columns, tops aligned; cards share the tallest one's height."""
+        children = n.children or []
+        gap = 12
+        cw = (w - gap * (len(children) - 1)) / max(1, len(children))
+        rh = max((Painter(None).node(c, 0, 0, cw) for c in children), default=0)
+        for i, c in enumerate(children):
+            self.node(c, x + i * (cw + gap), y, cw, min_height=rh)
+        return rh
+
     def c_list(self, n, x, y, w):
         top = y
         for item in n.items or []:

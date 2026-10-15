@@ -2,7 +2,7 @@
 // place; ids never change, so criteria keep pointing at the same components.
 // The server re-checks every rule on save; these only keep the editor sensible.
 
-export const CONTAINERS = new Set(["header", "card", "grid", "price_card", "form", "footer", "section"]);
+export const CONTAINERS = new Set(["header", "card", "grid", "price_card", "form", "footer", "section", "row"]);
 const GRID_CHILDREN = new Set(["card", "price_card", "image"]);
 
 /** { node, list, index, parent } for an id, or null. `list` is the array holding it. */

@@ -38,7 +38,7 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   `projects.RESUME_ACTIONS` must each have a handler in `public/js/views/chat.js` `RESUME` and
   labels in both languages (tests/test_resume_actions.py)
 - `app/mockups.py` + `app/mockup_templates.py`: mockups are a component tree (one node shape,
-  per-type rules in `check_tree`), stored as versions, linked to stories. Never HTML: the browser
+  per-type rules in `check_tree`; `row` is the side-by-side container: 2 to 4 children of any type, while a `grid` holds only card, price_card and image), stored as versions, linked to stories. Never HTML: the browser
   renders trees in `public/js/mockup/render.js` via `h()` with `data-component-id` on every element.
   Device frames (`public/js/mockup/frame.js`, browser around desktop, phone around mobile) are
   presentation only, never part of the tree; the PNG gets a browser frame with `frame=true`, its

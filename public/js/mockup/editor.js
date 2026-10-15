@@ -20,6 +20,7 @@ const DEFAULTS_EN = {
   image: { text: "Picture" },
   card: { text: "Card title", secondary: "Short description." },
   grid: { columns: 3 },
+  row: {},
   price_card: { text: "Package", secondary: "€29 / month", items: ["Feature 1", "Feature 2"] },
   list: { items: ["Point 1", "Point 2"] },
   table: { items: ["Column 1", "Column 2"], rows: [["…", "…"]] },
@@ -41,6 +42,7 @@ const DEFAULTS = {
   image: { text: "Pilt" },
   card: { text: "Kaardi pealkiri", secondary: "Lühike kirjeldus." },
   grid: { columns: 3 },
+  row: {},
   price_card: { text: "Pakett", secondary: "29 € / kuu", items: ["Omadus 1", "Omadus 2"] },
   list: { items: ["Punkt 1", "Punkt 2"] },
   table: { items: ["Veerg 1", "Veerg 2"], rows: [["…", "…"]] },
@@ -71,14 +73,14 @@ const VARIANTS = {
   notice: ["info", "success", "warning", "error"],
 };
 
-// A new component with sample content. A grid and a form must have children to be
+// A new component with sample content. A grid, a row and a form must have children to be
 // valid, so they start with some; `given` keeps the new ids unique among themselves.
 let samples = DEFAULTS;
 
 function blank(tree, type, given = new Set()) {
   const node = { id: ops.newId(tree, type, given), type, ...structuredClone(samples[type]) };
   given.add(node.id);
-  if (type === "grid") node.children = [blank(tree, "card", given), blank(tree, "card", given)];
+  if (type === "grid" || type === "row") node.children = [blank(tree, "card", given), blank(tree, "card", given)];
   if (type === "form") node.children = [blank(tree, "input", given), blank(tree, "button", given)];
   return node;
 }

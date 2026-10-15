@@ -24,15 +24,16 @@ from .mockup_templates import TEMPLATES, localized
 
 ComponentType = Literal[
     "header", "nav", "heading", "text", "image", "card", "grid", "price_card", "list", "table",
-    "form", "input", "button", "footer", "section", "note", "notice", "steps",
+    "form", "input", "button", "footer", "section", "note", "notice", "steps", "row",
 ]
 InputKind = Literal["text", "email", "password", "number", "date", "select", "checkbox", "textarea"]
 Variant = Literal["primary", "secondary", "link", "info", "success", "warning", "error"] | InputKind
 
-CONTAINERS = {"header", "card", "grid", "price_card", "form", "footer", "section"}
+CONTAINERS = {"header", "card", "grid", "price_card", "form", "footer", "section", "row"}
 NEEDS_TEXT = {"heading", "text", "image", "button", "input", "price_card", "note", "notice"}
 NEEDS_ITEMS = {"nav", "list", "table", "steps"}
 GRID_CHILDREN = {"card", "price_card", "image"}
+ROW_CHILDREN = (2, 4)  # a row lays its children out side by side: fewer is no row, more is cramped
 BUTTON_VARIANTS = {"primary", "secondary", "link"}
 NOTICE_VARIANTS = {"info", "success", "warning", "error"}
 INPUT_KINDS = set(InputKind.__args__)
@@ -95,6 +96,9 @@ def check_tree(tree: Tree) -> list[str]:
             problems.append(f"{where}: needs items")
         if node.type == "grid" and not node.children:
             problems.append(f"{where}: needs children")
+        if node.type == "row" and not ROW_CHILDREN[0] <= len(node.children or []) <= ROW_CHILDREN[1]:
+            problems.append(f"{where}: a row needs {ROW_CHILDREN[0]} to {ROW_CHILDREN[1]} children, "
+                            f"side by side; it has {len(node.children or [])}")
         if node.type == "form" and not node.children:
             problems.append(f"{where}: needs children (inputs and a button)")
         if parent == "grid" and node.type not in GRID_CHILDREN:

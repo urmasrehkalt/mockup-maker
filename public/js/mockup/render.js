@@ -18,6 +18,7 @@ const RENDERERS = {
     c.text ? h("div", { class: "wf-card-title" }, c.text) : null,
     c.secondary ? h("div", { class: "wf-muted" }, c.secondary) : null, kids(c)),
   grid: (c) => h("div", { class: "wf-grid", style: `--wf-cols: ${c.columns ?? 3}` }, kids(c)),
+  row: (c) => h("div", { class: "wf-row" }, kids(c)),
   price_card: (c) => h("div", { class: "wf-card wf-price" },
     h("div", { class: "wf-card-title" }, c.text),
     h("div", { class: "wf-price-value" }, c.secondary ?? ""),
