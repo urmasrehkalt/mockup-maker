@@ -20,7 +20,7 @@ Kõik ülesande põhifunktsioonid on olemas ja kasutatavad nii ChatGPT tellimuse
 | Groomimine: jagamine, ühendamine, AI ülevaatus leidudega „Rakenda“, „Muuda“, „Ignoreeri“ | töötab | #14, #15 |
 | Turvalisus: AI ainult serveri kaudu, võtit pole repositooriumis, mockup ei käivita koodi | töötab | #2, #8, #18 |
 
-Ülesande lisavõimalustest on tehtud backlog'i eksport Markdowni ja CSV-sse (#22), kriteeriumi ja mockup'i elemendi seos (kriteeriumile osutades tõstetakse element esile, #9), rollide kaupa story map (#22) ning mockup'i PNG eksport ja saatmine Agile Trackerisse (#16). Lisaks on käsitsi mockup'i redaktor (#17), vabakäe märkmed mockup'il (#18), projektimallid (#19), eesti- ning ingliskeelne liides (#20), mockup'i brauseri- või telefoniraam, mida saab sisse ja välja lülitada (#29), ning AI vestlus mockup'i juures, mis muudab mockup'it käsu järgi ja hoiab lood kooskõlas (#35).
+Ülesande lisavõimalustest on tehtud backlog'i eksport Markdowni ja CSV-sse (#22), kriteeriumi ja mockup'i elemendi seos (kriteeriumile osutades tõstetakse element esile, #9), rollide kaupa story map (#22) ning mockup'i PNG eksport ja saatmine Agile Trackerisse (#16). Lisaks on käsitsi mockup'i redaktor (#17), vabakäe märkmed mockup'il (#18), projektimallid (#19), eesti- ning ingliskeelne liides (#20), mockup'i brauseri- või telefoniraam, mida saab sisse ja välja lülitada (#29), ning AI vestlus mockup'i juures, mis muudab mockup'it käsu järgi ja hoiab lood kooskõlas (#35), ning vestluse järjekord, mis lubab anda järgmise käsu enne eelmise lõppu (#36).
 
 ### Kuidas seda kontrolliti
 

@@ -15,7 +15,7 @@ import re
 import sqlite3
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import backlog, db, mockups, projects, testability
@@ -390,8 +390,10 @@ router = APIRouter(prefix="/api/projects/{project_id}", tags=["review"])
 
 
 @router.post("/review", response_model=projects.ProjectState)
-async def post_review(project_id: int, conn: sqlite3.Connection = Depends(db.get_db)):
-    return await run_review(conn, project_id)
+async def post_review(project_id: int, request: Request, conn: sqlite3.Connection = Depends(db.get_db)):
+    # The review reads the whole backlog, so it waits for the turn that is running (and they for it).
+    async with request.app.state.turns.lock(project_id):
+        return await run_review(conn, project_id)
 
 
 @router.post("/review/{message_id}/findings/{index}", response_model=projects.ProjectState)

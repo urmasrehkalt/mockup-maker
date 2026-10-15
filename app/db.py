@@ -177,6 +177,18 @@ MIGRATIONS: list[str] = [
         created_at  TEXT NOT NULL
     );
     """,
+    # 15: conversation inputs waiting for their turn (done ones are deleted; messages keep the history)
+    """
+    CREATE TABLE turns (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id     INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        input          TEXT NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'failed')),
+        error_code     TEXT,
+        error_message  TEXT,
+        created_at     TEXT NOT NULL
+    );
+    """,
 ]
 
 

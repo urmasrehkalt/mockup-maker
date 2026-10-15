@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import backlog, db, mockups, projects, testability
@@ -710,6 +710,26 @@ def _with_issues(proposal: Proposal) -> dict[str, Any]:
     return data
 
 
+def _mockup_base(conn: sqlite3.Connection, project_id: int, story: backlog.Story) -> dict[str, Any]:
+    """The mockup a card was made for: its id and newest version (both None: the story has none)."""
+    linked = [m for m in mockups.mockups(conn, project_id) if m.id in story.mockup_ids]
+    return {"mockup_id": linked[0].id, "version": linked[0].version} if linked else {"mockup_id": None, "version": None}
+
+
+def _stale_card() -> HTTPException:
+    return HTTPException(409, {"code": "stale_card",
+                               "message": "The story or its mockup changed after this suggestion was made. "
+                                          "Ask for it again."})
+
+
+def _stored_proposal(conn: sqlite3.Connection, project_id: int, proposal: Proposal) -> dict[str, Any]:
+    data = _with_issues(proposal)
+    story = next((s for s in backlog.stories(conn, project_id) if s.key == proposal.story_key), None)
+    if story:
+        data["base"] = _mockup_base(conn, project_id, story)
+    return data
+
+
 TEMPLATE_KEYS = set(TEMPLATES)
 
 
@@ -853,12 +873,27 @@ def _stored_change(conn: sqlite3.Connection, project_id: int, change: Change) ->
         "wording": {"role_phrase": story.role_phrase, "action": story.action, "benefit": story.benefit},
         "criteria": [{"text": c.text, "component_id": c.component_id} for c in story.criteria],
         "mockup_id": linked[0].id if linked else None,
+        "version": linked[0].version if linked else None,
         "mockup": linked[0].tree.model_dump() if linked else None,
     }
     if change.wording:
         data["after_title"] = backlog.title(backlog.StoryParts(
             role_name=story.role_name, **change.wording.model_dump()), project.language)
     return data
+
+
+def _refuse_stale_change(conn: sqlite3.Connection, project_id: int, story: backlog.Story,
+                         before: dict[str, Any]) -> None:
+    """A change card holds the full wording, criteria and mockup it proposes. If the story moved on
+    since (a hand edit, another change, a mockup edit), applying it would overwrite that work."""
+    if "version" not in before:
+        return  # a card stored before cards remembered what they were made for
+    now = _mockup_base(conn, project_id, story)
+    wording = {"role_phrase": story.role_phrase, "action": story.action, "benefit": story.benefit}
+    criteria = [{"text": c.text, "component_id": c.component_id} for c in story.criteria]
+    if (now["mockup_id"], now["version"], wording, criteria) != (
+            before["mockup_id"], before["version"], before["wording"], before["criteria"]):
+        raise _stale_card()
 
 
 def apply_change(conn: sqlite3.Connection, project_id: int, data: ChangeInput) -> None:
@@ -878,6 +913,7 @@ def apply_change(conn: sqlite3.Connection, project_id: int, data: ChangeInput) -
         return
 
     story = backlog.get_story(conn, project_id, change["story_id"])
+    _refuse_stale_change(conn, project_id, story, change["before"])
     edits = data.edits or ChangeEdits()
     wording = edits.wording or (Wording(**change["wording"]) if change["wording"] else None)
     new_tree = mockups.Tree(**change["mockup"]) if change["mockup"] else None
@@ -925,6 +961,8 @@ def apply_criteria(conn: sqlite3.Connection, project_id: int, data: CriteriaInpu
     story = next((s for s in backlog.stories(conn, project_id) if s.key == key), None)
     if story is None:
         raise HTTPException(409, f"Story {key} is no longer in the backlog")
+    if "base" in proposal and proposal["base"] != _mockup_base(conn, project_id, story):
+        raise _stale_card()
     offered = proposal["criteria"]
     indexes = [item.index for item in data.items if item.index is not None]
     if len(set(indexes)) != len(indexes) or not all(0 <= i < len(offered) for i in indexes):
@@ -1046,20 +1084,9 @@ async def take_turn(conn: sqlite3.Connection, project_id: int, data: Any) -> pro
         "roles": [r.model_dump() for r in turn.roles] if turn.roles else None,
         "stories": [st.model_dump() for st in turn.stories] if turn.stories else None,
         "priority": turn.priority.model_dump() if turn.priority else None,
-        "proposal": _with_issues(turn.proposal) if turn.proposal else None,
+        "proposal": _stored_proposal(conn, project_id, turn.proposal) if turn.proposal else None,
         "change": _stored_change(conn, project_id, turn.change) if turn.change else None,
         "new_view": _stored_new_view(turn.new_view) if turn.new_view else None,
         "next_steps": [s.model_dump() for s in turn.next_steps],
     })
     return projects.state(conn, project_id)
-
-
-# --- API -----------------------------------------------------------------
-
-router = APIRouter(prefix="/api/projects", tags=["conversation"])
-
-
-@router.post("/{project_id}/turn", response_model=projects.ProjectState)
-async def post_turn(project_id: int, data: UserInput,
-                    conn: sqlite3.Connection = Depends(db.get_db)):
-    return await take_turn(conn, project_id, data)

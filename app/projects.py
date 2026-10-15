@@ -87,6 +87,16 @@ class Clarification(BaseModel):
     answer: str | None  # None: the user skipped it
 
 
+class QueueItem(BaseModel):
+    """A conversation input that has not been answered yet: waiting, running, or failed."""
+    id: int
+    status: Literal["queued", "running", "failed"]
+    input: dict[str, Any]
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: str
+
+
 class ProjectState(BaseModel):
     project: Project
     roles: list[Role]
@@ -95,6 +105,7 @@ class ProjectState(BaseModel):
     undo: backlog.Undo | None
     messages: list[Message]
     resume: Resume
+    queue: list[QueueItem] = []
 
 
 # --- storage -------------------------------------------------------------
@@ -205,6 +216,13 @@ def resume(project: Project, history: list[Message]) -> Resume:
     return Resume(step=project.step, kind="continue", actions=RESUME_ACTIONS[project.step])
 
 
+def queue(conn: sqlite3.Connection, project_id: int) -> list[QueueItem]:
+    return [QueueItem(id=r["id"], status=r["status"], input=json.loads(r["input"]),
+                      error_code=r["error_code"], error_message=r["error_message"],
+                      created_at=r["created_at"])
+            for r in conn.execute("SELECT * FROM turns WHERE project_id = ? ORDER BY id", (project_id,))]
+
+
 def state(conn: sqlite3.Connection, project_id: int) -> ProjectState:
     project = get(conn, project_id)
     history = messages(conn, project_id)
@@ -212,7 +230,7 @@ def state(conn: sqlite3.Connection, project_id: int) -> ProjectState:
                         stories=backlog.stories(conn, project_id),
                         mockups=mockups.mockups(conn, project_id),
                         undo=backlog.last_undo(conn, project_id), messages=history,
-                        resume=resume(project, history))
+                        resume=resume(project, history), queue=queue(conn, project_id))
 
 
 # --- API -----------------------------------------------------------------

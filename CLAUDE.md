@@ -20,7 +20,17 @@ append-only entries in `app/db.py` `MIGRATIONS`, tracked with `PRAGMA user_versi
   Every backlog change calls `record_undo()` first in the same transaction; `undo()` restores rows
   in place (upsert, never delete-and-reinsert) so links to surviving stories are kept. Definition of Ready
   lives in `readiness()`; every change that can affect it calls `check_status()` in its transaction
-- `app/conversation.py`: guided conversation, one `POST /turn` per user input. User decisions
+- `app/turns.py`: the conversation queue. `POST /turns` only queues an input (202, the state carries
+  `queue`); one worker per project runs its turns one at a time, in order, each building its AI
+  payload from the database when it starts. Queue rows (`turns`: queued, running, failed) are
+  persisted, a finished turn is deleted (messages hold the history); a failed one does not block
+  the rest and an AI failure can be retried (`/turns/{id}/retry`). On start a running turn is
+  marked failed (`interrupted`) and queued ones run. `POST /turn` is the same turn through the
+  same queue, answered when it has run (scripts and tests). The review takes the project's lock
+  (`TurnQueue.lock`). The queue lives on `app.state.turns`, not in a module global
+- `app/conversation.py`: guided conversation, one turn per user input (`take_turn`). Change and
+  proposal cards remember the mockup version they were made for; applying one after the story or
+  mockup moved on is a 409 `stale_card`. User decisions
   (answers, roles, notes) are stored before the AI call; the AI payload is built from DB state;
   `check_turn` holds state-aware rules (question minimum/cap) retried via `run_task(check=...)`.
   Cards: question, roles, stories, priority, proposal (criteria + mockup), change (refinement),

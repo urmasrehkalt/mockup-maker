@@ -258,6 +258,10 @@ label { display: block; font-size: 0.875rem; font-weight: 600; margin: 12px 0 4p
 @media (prefers-reduced-motion: reduce) { .thinking p { animation: none; } }
 
 .conversation.busy .choices button, .conversation.busy .card-block button { pointer-events: none; opacity: 0.55; }
+/* A card whose decision waits in the queue, and an input waiting for its turn. */
+.message.deciding .choices button, .message.deciding .card-block button { pointer-events: none; opacity: 0.55; }
+.message.user.queued { opacity: 0.7; }
+.message.user.queued .hint { margin: 2px 0 0; }
 
 .composer {
   display: flex;

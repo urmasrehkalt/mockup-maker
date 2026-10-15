@@ -38,24 +38,51 @@ const RESUME = {
 
 /**
  * @param state   project state from the API
- * @param send    async (input) => void, posts one turn
- * @param options { pending, error } for the in-flight turn
+ * @param send    async (input) => void, queues one input
+ * @param options { pending, error, slow } for a blocking request (the backlog review);
+ *                { onRetry(item), onRemove(item) } for inputs that failed in the queue
  */
-export function conversation(state, send, { pending = false, error = null, slow = false } = {}) {
+export function conversation(state, send, { pending = false, error = null, slow = false,
+  onRetry = () => {}, onRemove = () => {} } = {}) {
   contentLanguage = state.project.language;
   loadTemplates(contentLanguage);
   const { messages } = state;
+  const queue = state.queue ?? [];
+  const waiting = queue.filter((item) => item.status !== "failed");
+  const failed = queue.filter((item) => item.status === "failed");
   const last = messages[messages.length - 1];
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const live = !pending && last && last === lastAssistant ? last : null;
+  // A card whose decision is already in the queue cannot be decided twice.
+  const deciding = new Set(waiting.map((item) => item.input.message_id).filter((id) => id != null));
+  const queuedLabels = new Set(waiting.filter((item) => item.input.kind === "next").map((item) => item.input.label));
+  const working = waiting.find((item) => item.status === "running") ?? waiting[0];
 
   return h("section", { class: `conversation card ${pending ? "busy" : ""}`, "aria-live": "polite" },
-    messages.map((m) => (m.role === "user" ? userMessage(m) : assistantMessage(m, m === live, send, state))),
-    pending ? h("div", { class: "message assistant thinking" }, author("assistant"),
-      h("p", {}, t(slow === "review" ? "review.thinking" : slow ? "chat.thinking_mockup" : "chat.thinking"))) : null,
+    messages.map((m) => (m.role === "user" ? userMessage(m)
+      : assistantMessage(m, m === live, send, state, deciding.has(m.id), queuedLabels))),
+    waiting.map((item) => queuedMessage(item)),
+    pending || working ? h("div", { class: "message assistant thinking" }, author("assistant"),
+      h("p", {}, t(thinkingKey(pending ? slow : working.input, state)))) : null,
+    failed.map((item) => failedCard(item, onRetry, onRemove)),
     error ? errorCard(error, send, state) : null,
-    !pending && !error ? resumeCard(state, last, lastAssistant, send) : null,
+    !pending && !error && !queue.length ? resumeCard(state, last, lastAssistant, send) : null,
     composer(state, send, pending));
+}
+
+// Which waiting text fits: a plain step, a mockup proposal (slow) or the backlog review.
+function thinkingKey(input, state) {
+  if (input === "review" || input?.kind === "review") return "review.thinking";
+  return input === true || isSlow(input, state.project) ? "chat.thinking_mockup" : "chat.thinking";
+}
+
+/** Whether the AI will need long for this input (criteria and mockup work). */
+export function isSlow(input, project) {
+  if (!input || input === false) return false;
+  if (input === "review") return true;
+  return ["focus", "refine", "new_view"].includes(input.kind)
+    || (input.kind === "next" && input.step === "criteria")
+    || (input.kind === "text" && project.step === "refinements" && Boolean(project.current_story_id));
 }
 
 function author(role) {
@@ -78,9 +105,34 @@ function userMessage(message) {
   return h("div", { class: "message user" }, author("user"), h("p", {}, text));
 }
 
-function assistantMessage(message, live, send, state) {
+// An input still waiting for its turn, shown like a sent message. One that is being answered
+// is already stored with the conversation, so it needs no bubble here.
+function queuedMessage(item) {
+  if (item.status !== "queued") return null;
+  const bubble = userMessage({ content: { input: item.input } });
+  if (!bubble) return null; // decisions are shown on their card
+  bubble.classList.add("queued");
+  bubble.append(h("p", { class: "hint" }, t("chat.queued")));
+  return bubble;
+}
+
+// An input that did not get through. An AI failure can be asked again (the input is kept).
+function failedCard(item, onRetry, onRemove) {
+  const key = `error.${item.error_code}`;
+  const text = t(key) === key ? t("error.turn_failed") : t(key);
+  const lost = !item.error_code?.startsWith("ai_");
+  const input = lost ? userMessage({ content: { input: item.input } }) : null;
+  return h("div", { class: "notice error", role: "alert" },
+    input ? input.querySelector("p") : null,
+    h("p", {}, text),
+    item.error_code?.startsWith("ai_") ? h("button", { type: "button", onclick: () => onRetry(item) }, t("chat.retry")) : null,
+    " ",
+    h("button", { type: "button", class: "small", onclick: () => onRemove(item) }, t("chat.remove")));
+}
+
+function assistantMessage(message, live, send, state, deciding = false, queuedLabels = new Set()) {
   const c = message.content;
-  return h("div", { class: "message assistant" },
+  return h("div", { class: `message assistant ${deciding ? "deciding" : ""}` },
     author("assistant"),
     h("p", {}, c.text),
     c.question ? questionCard(message, live, send) : null,
@@ -91,7 +143,7 @@ function assistantMessage(message, live, send, state) {
     c.change ? changeCard(message, live, send, state) : null,
     c.review ? reviewCard(message, send, templates, contentLanguage) : null,
     c.new_view ? newViewCard(message, live, send, state) : null,
-    live && c.next_steps?.length ? nextSteps(c.next_steps, send) : null);
+    live && c.next_steps?.length ? nextSteps(c.next_steps, send, queuedLabels) : null);
 }
 
 // --- question ------------------------------------------------------------
@@ -548,9 +600,10 @@ function changeCard(message, live, send, state) {
 
 // --- next steps, resume, errors, composer --------------------------------
 
-function nextSteps(steps, send) {
+function nextSteps(steps, send, queuedLabels = new Set()) {
   return h("div", { class: "choices next-steps" }, steps.map((step, i) => h("button", {
     type: "button",
+    disabled: queuedLabels.has(step.label),
     class: i === 0 ? "choice primary" : "choice",
     onclick: () => (step.kind === "end_meeting" ? endMeeting()
       : step.step === "grooming" ? send({ kind: "review" })
@@ -618,7 +671,9 @@ function composer(state, send, pending) {
   if (start && state.project.draft_idea) box.value = state.project.draft_idea; // from a template, still editable
   const submit = () => {
     const text = box.value.trim();
-    if (text) send({ kind: "text", text });
+    if (!text) return;
+    box.value = ""; // sent: the next thought can be typed at once; a refusal puts it back
+    send({ kind: "text", text });
   };
   box.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }

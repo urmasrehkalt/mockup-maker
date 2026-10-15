@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import backlog, config, conversation, db, export, mockup_chat, mockups, projects, review, templates, testability, tracker
+from . import backlog, config, db, export, mockup_chat, mockups, projects, review, templates, testability, tracker, turns
 from .ai import AIError
 
 # How each AI failure reaches the client: disabled and unavailable are the
@@ -16,11 +16,14 @@ PUBLIC_DIR = config.ROOT_DIR / "public"
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     config.environment()  # fail fast on an invalid ENVIRONMENT
     config.ai_provider()  # ...and on an invalid AI_PROVIDER
     db.init()
+    app.state.turns = turns.TurnQueue()
+    app.state.turns.recover()
     yield
+    await app.state.turns.stop()
 
 
 app = FastAPI(title="Mockup Maker", version="0.1.0", lifespan=lifespan)
@@ -44,7 +47,7 @@ async def ai_error_handler(_: Request, exc: AIError) -> JSONResponse:
 
 
 app.include_router(projects.router)
-app.include_router(conversation.router)
+app.include_router(turns.router)
 app.include_router(backlog.router)
 app.include_router(mockups.router)
 app.include_router(mockup_chat.router)
